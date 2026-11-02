@@ -137,6 +137,10 @@ func TestGrantVersionConflict(t *testing.T) {
 // TestGrantUnknownAccount 账号不存在 → 报错零写入。
 func TestGrantUnknownAccount(t *testing.T) {
 	s := openStore(t, t.TempDir())
+	var before int
+	if err := s.DB().QueryRow(`SELECT COUNT(*) FROM cn35_inventory_grants`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
 	_, err := s.GrantFiveStar("no-such-user", testGrantCfg(), testCatalog(t))
 	if !errors.Is(err, cn35game.ErrGrantTarget) {
 		t.Fatalf("应 ErrGrantTarget: %v", err)
@@ -145,8 +149,8 @@ func TestGrantUnknownAccount(t *testing.T) {
 	if err := s.DB().QueryRow(`SELECT COUNT(*) FROM cn35_inventory_grants`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != 0 {
-		t.Fatalf("失败发放留痕: %d", n)
+	if n != before {
+		t.Fatalf("失败发放留痕: got=%d want=%d", n, before)
 	}
 }
 

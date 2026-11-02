@@ -29,9 +29,13 @@ func userDecksHandler(dep Deps) httpapi.Handler {
 func userDeckMutationHandler(dep Deps, clear bool) httpapi.Handler {
 	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
 		q := req.Query
-		partyID := q.Get("party_id")
-		slotIndex, slotErr := strconv.Atoi(q.Get("party_index"))
-		unitID, unitErr := strconv.Atoi(q.Get("unit_id"))
+		partyID := firstNonEmpty(q.Get("party_id"), req.Form.Get("party_id"))
+		slotIndex, slotErr := strconv.Atoi(firstNonEmpty(
+			q.Get("party_index"), q.Get("slot"),
+			req.Form.Get("party_index"), req.Form.Get("slot")))
+		unitID, unitErr := strconv.Atoi(firstNonEmpty(
+			q.Get("unit_id"), q.Get("id"),
+			req.Form.Get("unit_id"), req.Form.Get("id")))
 		name := "user_decks_on"
 		if clear {
 			name = "user_decks_off"
@@ -42,6 +46,13 @@ func userDeckMutationHandler(dep Deps, clear bool) httpapi.Handler {
 		}
 		if slotErr != nil || unitErr != nil || partyID == "" || unitID <= 0 {
 			return cn35wire.MarshalJSON(deckMutationError(ErrDeckSlotInvalid))
+		}
+		if len(partyID) == 3 && partyID[0] == '0' {
+			if decks, derr := dep.Decks.Decks(req.UserID); derr == nil {
+				if ord, oerr := ParsePartyOrdinal(partyID); oerr == nil && ord >= 1 && ord <= len(decks) {
+					partyID = decks[ord-1].PartyID
+				}
+			}
 		}
 		if clear {
 			if err := dep.Decks.ClearDeckUnit(req.UserID, partyID, slotIndex, unitID); err != nil {

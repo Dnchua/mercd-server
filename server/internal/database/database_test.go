@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"testing"
@@ -22,82 +23,30 @@ func TestMigrationLifecycle(t *testing.T) {
 	if err = Migrate(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	raw1, _ := fs.ReadFile(src, "0001_accounts.sql")
-	raw2, _ := fs.ReadFile(src, "0002_player_core.sql")
-	raw3, _ := fs.ReadFile(src, "0003_cn35.sql")
-	raw4, _ := fs.ReadFile(src, "0004_cn35_guest_device.sql")
-	raw5, _ := fs.ReadFile(src, "0005_cn35_inventory.sql")
-	raw6, _ := fs.ReadFile(src, "0006_cn35_quest_progress.sql")
-	raw7, _ := fs.ReadFile(src, "0007_cn35_quest_battle.sql")
-	raw8, _ := fs.ReadFile(src, "0008_cn35_account_decks.sql")
-	raw9, _ := fs.ReadFile(src, "0009_cn35_monster_size.sql")
-	raw10, _ := fs.ReadFile(src, "0010_cn35_messages.sql")
-	raw11, _ := fs.ReadFile(src, "0011_cn35_messages_seed.sql")
-	raw12, _ := fs.ReadFile(src, "0012_cn35_gacha.sql")
-	raw13, _ := fs.ReadFile(src, "0013_cn35_gacha_roster.sql")
-	raw14, _ := fs.ReadFile(src, "0014_cn35_app_conf_versions.sql")
-	raw15, _ := fs.ReadFile(src, "0015_cn35_presents_infos.sql")
-	raw16, _ := fs.ReadFile(src, "0016_cn35_unit_helper.sql")
-	raw17, _ := fs.ReadFile(src, "0017_cn35_items_resources.sql")
-	raw18, _ := fs.ReadFile(src, "0018_cn35_low_intensity_waves.sql")
-	raw19, _ := fs.ReadFile(src, "0019_cn35_tutorial_task_claims.sql")
-	raw20, _ := fs.ReadFile(src, "0020_cn35_item_grants_and_material_goods.sql")
-	raw21, _ := fs.ReadFile(src, "0021_cn35_item_bag_category_fix.sql")
-	raw22, _ := fs.ReadFile(src, "0022_cn35_user_exp_curve.sql")
-	raw23, _ := fs.ReadFile(src, "0023_cn35_medal_potion_goods.sql")
-	raw24, _ := fs.ReadFile(src, "0024_cn35_item_use_ap_growth.sql")
-	raw25, _ := fs.ReadFile(src, "0025_cn35_skills.sql")
-	raw26, _ := fs.ReadFile(src, "0026_cn35_rune_goods_fixups.sql")
-	raw27, _ := fs.ReadFile(src, "0027_cn35_guild.sql")
-	raw28, _ := fs.ReadFile(src, "0028_guild_subs_pending.sql")
-	raw29, _ := fs.ReadFile(src, "0029_cn35_guild_battle_snapshots.sql")
-	raw30, _ := fs.ReadFile(src, "0030_cn35_rune_hunt.sql")
-	raw31, _ := fs.ReadFile(src, "0031_cn35_daily_shop.sql")
-	raw32, _ := fs.ReadFile(src, "0032_jp_accounts.sql")
-	raw33, _ := fs.ReadFile(src, "0033_cn35_guildwar_bp_potion_off.sql")
-	upgrade := fstest.MapFS{
-		"0001_accounts.sql":                            {Data: raw1},
-		"0002_player_core.sql":                         {Data: raw2},
-		"0003_cn35.sql":                                {Data: raw3},
-		"0004_cn35_guest_device.sql":                   {Data: raw4},
-		"0005_cn35_inventory.sql":                      {Data: raw5},
-		"0006_cn35_quest_progress.sql":                 {Data: raw6},
-		"0007_cn35_quest_battle.sql":                   {Data: raw7},
-		"0008_cn35_account_decks.sql":                  {Data: raw8},
-		"0009_cn35_monster_size.sql":                   {Data: raw9},
-		"0010_cn35_messages.sql":                       {Data: raw10},
-		"0011_cn35_messages_seed.sql":                  {Data: raw11},
-		"0012_cn35_gacha.sql":                          {Data: raw12},
-		"0013_cn35_gacha_roster.sql":                   {Data: raw13},
-		"0014_cn35_app_conf_versions.sql":              {Data: raw14},
-		"0015_cn35_presents_infos.sql":                 {Data: raw15},
-		"0016_cn35_unit_helper.sql":                    {Data: raw16},
-		"0017_cn35_items_resources.sql":                {Data: raw17},
-		"0018_cn35_low_intensity_waves.sql":            {Data: raw18},
-		"0019_cn35_tutorial_task_claims.sql":           {Data: raw19},
-		"0020_cn35_item_grants_and_material_goods.sql": {Data: raw20},
-		"0021_cn35_item_bag_category_fix.sql":          {Data: raw21},
-		"0022_cn35_user_exp_curve.sql":                 {Data: raw22},
-		"0023_cn35_medal_potion_goods.sql":             {Data: raw23},
-		"0024_cn35_item_use_ap_growth.sql":             {Data: raw24},
-		"0025_cn35_skills.sql":                         {Data: raw25},
-		"0026_cn35_rune_goods_fixups.sql":              {Data: raw26},
-		"0027_cn35_guild.sql":                          {Data: raw27},
-		"0028_guild_subs_pending.sql":                  {Data: raw28},
-		"0029_cn35_guild_battle_snapshots.sql":         {Data: raw29},
-		"0030_cn35_rune_hunt.sql":                      {Data: raw30},
-		"0031_cn35_daily_shop.sql":                     {Data: raw31},
-		"0032_jp_accounts.sql":                         {Data: raw32},
-		"0033_cn35_guildwar_bp_potion_off.sql":         {Data: raw33},
-		"0034_test.sql":                                {Data: []byte(`CREATE TABLE example(id INTEGER PRIMARY KEY); INSERT INTO example VALUES(42);`)},
+	// 「旧二进制打开新库」场景：用内嵌迁移集合 + 一条合成迁移模拟
+	// 「本机已有一条更高编号的迁移」。集合从内嵌目录动态生成，避免每加一条
+	// 迁移就要手改这段清单（GUILDCLOSE350 并行追加 0038—0041 时踩过）。
+	names, err := EmbeddedMigrationNames()
+	if err != nil {
+		t.Fatal(err)
 	}
+	upgrade := fstest.MapFS{}
+	for _, name := range names {
+		raw, rerr := fs.ReadFile(src, name)
+		if rerr != nil {
+			t.Fatal(rerr)
+		}
+		upgrade[name] = &fstest.MapFile{Data: raw}
+	}
+	future := fmt.Sprintf("%04d_test.sql", len(names)+1)
+	upgrade[future] = &fstest.MapFile{Data: []byte(`CREATE TABLE example(id INTEGER PRIMARY KEY); INSERT INTO example VALUES(42);`)}
 	if err = migrate(ctx, db, upgrade); err != nil {
 		t.Fatal(err)
 	}
 	if err = Migrate(ctx, db); err == nil {
 		t.Fatal("old binary accepted newer DB")
 	}
-	upgrade["0034_test.sql"].Data = []byte(`CREATE TABLE changed(id INTEGER);`)
+	upgrade[future].Data = []byte(`CREATE TABLE changed(id INTEGER);`)
 	if err = migrate(ctx, db, upgrade); err == nil {
 		t.Fatal("edited history accepted")
 	}

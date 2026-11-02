@@ -96,6 +96,24 @@ func scripts(source fs.FS) ([]Migration, error) {
 	return out, nil
 }
 
+// EmbeddedMigrationNames 返回内嵌迁移的有序文件名列表（只读，供测试与工具断言
+// 「当前主线迁移条数与最新迁移」）。新增迁移后不需要再手改测试常量。
+func EmbeddedMigrationNames() ([]string, error) {
+	source, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return nil, err
+	}
+	ms, err := scripts(source)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(ms))
+	for _, m := range ms {
+		names = append(names, m.Name)
+	}
+	return names, nil
+}
+
 // Migrate applies pending scripts atomically with their checksum ledger. A failed
 // script rolls back the entire batch. Changed/deleted history and newer DBs fail closed.
 func Migrate(ctx context.Context, db *sql.DB) error {

@@ -95,6 +95,10 @@ func (s *Store) Close() error { return s.db.Close() }
 // DB 暴露运行库句柄（事务贯穿与排障用）。
 func (s *Store) DB() *sql.DB { return s.db }
 
+// SetClock 注入时钟（测试与「-guild-clock-offset」验收手段共用；
+// 生产默认 time.Now）。只影响依赖时钟的业务判定，不改写落库时间戳格式。
+func (s *Store) SetClock(clock func() time.Time) { s.clock = clock }
+
 func (s *Store) clockNowUTC() time.Time {
 	clock := s.clock
 	if clock == nil {
@@ -532,6 +536,32 @@ func (s *Store) UsersUpdate(userID, name string, tutorialFinish bool) error {
 	})
 }
 
+// UpdateMemo users/update_memo（0044）：单事务更新 cn35_player_profiles.memo。
+// 空串 memo 保持原服 200 幂等语义（不覆盖既有非空签名）。
+func (s *Store) UpdateMemo(userID, memo string) error {
+	return s.withTx(func(tx *sql.Tx) error {
+		ctx := context.Background()
+		var res sql.Result
+		var err error
+		if memo != "" {
+			res, err = tx.ExecContext(ctx,
+				`UPDATE cn35_player_profiles SET memo=?,updated_at=? WHERE user_id=?`,
+				memo, nowUTC(), userID)
+		} else {
+			res, err = tx.ExecContext(ctx,
+				`UPDATE cn35_player_profiles SET updated_at=? WHERE user_id=?`,
+				nowUTC(), userID)
+		}
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return cn35game.ErrNoAccount
+		}
+		return nil
+	})
+}
+
 // LastServer getServerList.lastLoginServer 来源（chooseServer 持久化 serverId）。
 func (s *Store) LastServer(heAccountID string) string {
 	var v string
@@ -585,15 +615,16 @@ func (s *Store) Snapshot(userID string) (*cn35game.PlayerSnapshot, error) {
 	}
 	var a account
 	var lvl, exp, maxExp, ap, maxAP, bp, maxBP, lbSec int64
-	var leader, helper, guild, apAt string
+	var leader, helper, guild, memo, apAt, createdAt string
 	var tut int
 	row := s.db.QueryRow(`SELECT a.user_name, a.tutorial_finish,
 		p.level,p.exp,p.max_exp,p.ap,p.max_ap,p.ap_updated_at,p.bp,p.max_bp,
-		p.leader_unit_id,p.helper_unit_id,p.login_bonus_receivable_sec,p.guild_name_snapshot
+		p.leader_unit_id,p.helper_unit_id,p.login_bonus_receivable_sec,p.guild_name_snapshot,
+		p.memo,p.created_at
 		FROM cn35_accounts a JOIN cn35_player_profiles p ON p.user_id=a.user_id
 		WHERE a.user_id=?`, userID)
 	err := row.Scan(&a.userName, &tut, &lvl, &exp, &maxExp, &ap, &maxAP,
-		&apAt, &bp, &maxBP, &leader, &helper, &lbSec, &guild)
+		&apAt, &bp, &maxBP, &leader, &helper, &lbSec, &guild, &memo, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, cn35game.ErrNoAccount
 	}
@@ -604,6 +635,14 @@ func (s *Store) Snapshot(userID string) (*cn35game.PlayerSnapshot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cn35store: 无效 AP 时间锚点 user=%s: %w", userID, err)
 	}
+	// LOGIN350-02：泉水可领时刻由「上次领取锚点（0 值回落到建号时间）+3600s」
+	// 派生，不再直接下发档案列（该列 0035 起只承担锚点存储）。
+	createdTime, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("cn35store: 无效建号时间锚点 user=%s: %w", userID, err)
+	}
+	springAnchor := cn35game.SpringAnchorSec(lbSec, createdTime.Unix(), s.clockNowUTC().Unix())
+	springReceivable := springAnchor + cn35game.SpringIntervalSec
 	balances := map[string]int64{}
 	rows, err := s.db.Query(`SELECT currency,amount FROM cn35_player_balances WHERE user_id=?`, userID)
 	if err != nil {
@@ -649,7 +688,7 @@ func (s *Store) Snapshot(userID string) (*cn35game.PlayerSnapshot, error) {
 		"gacha_point":       balances["gacha_point"],
 		// ITEM350-07：徽章余额同源下发（交易所读 data.user.medal）。
 		"medal":                      balances["medal"],
-		"login_bonus_receivable_sec": lbSec,
+		"login_bonus_receivable_sec": springReceivable,
 		"guild_name":                 guild,
 		// 结算条/等级表数据源（SWFQuestClear.cs:709-714 读 user.exp_table/
 		// current_exp/level）。need_exp/exp_table 按用户等级经验表由当前等级
@@ -733,12 +772,18 @@ func (s *Store) Snapshot(userID string) (*cn35game.PlayerSnapshot, error) {
 	if a.userName != "" {
 		user["user_name"] = a.userName
 	}
+	if memo != "" {
+		user["memo"] = memo
+	}
 	if tut == 1 {
 		user["game_status"] = 2
 	}
+	cn35game.ApplyDefaultUserWireFields(user, balances)
+	userCoin := map[string]any{"amount": balances["coin"]}
+	cn35game.ApplyDefaultUserCoinWireFields(userCoin)
 	return &cn35game.PlayerSnapshot{
 		User:        user,
-		UserCoin:    map[string]any{"amount": balances["coin"]},
+		UserCoin:    userCoin,
 		UserSummary: map[string]any{},
 	}, nil
 }

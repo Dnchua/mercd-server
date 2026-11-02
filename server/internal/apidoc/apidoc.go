@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Dnchua/mercd-server/server/internal/httpapi"
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/Dnchua/mercd-server/server/internal/httpapi"
 )
 
 type Options struct {

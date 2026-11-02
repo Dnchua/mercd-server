@@ -333,9 +333,9 @@ func TestBattleSettlePaysMissingAP(t *testing.T) {
 	if err != nil || res.Already {
 		t.Fatalf("prepared 会话结算应补扣并落账: %v %+v", err, res)
 	}
-	// 0024 起结算入账 50 exp → level2 → AP 补满 max_ap=21（补扣仍恰一次，
-	// 但升级覆盖为满值）。
-	if ap := battleAP(t, s, uid); ap != 21 {
+	// LOGIN350-02 起升级 AP 叠加增量（不再补满）：补扣 1 AP（19→? 见 fixture）
+	// 后 exp 50 → level2（增量 +1）→ ap=19。
+	if ap := battleAP(t, s, uid); ap != 19 {
 		t.Fatalf("补扣 AP 应恰一次: %d", ap)
 	}
 }
@@ -454,8 +454,8 @@ func TestBattleRestartPersistence(t *testing.T) {
 	if p.QuestID != 2 || p.Clears[1]["normal"] != 1 {
 		t.Fatalf("重启后进度/通关丢失: %+v", p)
 	}
-	// 0024 起升级补满 AP：level2 → ap=21。
-	if battleAP(t, s2, uid) != 21 || balanceOf(t, s2, uid, "gacha_point") != 302+20 {
+	// LOGIN350-02 起升级 AP 叠加增量：level2 → ap=19（扣费后 +1）。
+	if battleAP(t, s2, uid) != 19 || balanceOf(t, s2, uid, "gacha_point") != 302+20 {
 		t.Fatal("重启后资源余额丢失")
 	}
 }

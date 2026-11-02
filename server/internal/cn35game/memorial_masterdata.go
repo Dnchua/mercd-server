@@ -76,6 +76,38 @@ func memorialUnitText(unitID int) map[string]any {
 	return memorialTableData().UnitText[strconv.Itoa(unitID)]
 }
 
+// memorialUnitTextOverride 取 `unit_text[<id>]` 下的**覆盖值**（纪念服汉化/数值覆盖）。
+//
+// 与 ut["description"] 这类「只补缺口」的旧键不同：`main_name`/`prefix_name`/
+// `*_override` 是显式覆盖，命中即压过国服 catalog 值。用途是把纪念服已汉化的
+// 名称/称号/简介/档案与「以纪念服终值反解出的 Lv1 基础值」下发到客户端，而
+// 不改 `units.json`（它的 SHA 被 cardcatalog/grant 配置/审计输入同时钉住，
+// 改动会让历史批次配置无法重放）。
+func memorialUnitTextOverride(unitID int, key string) (string, bool) {
+	e := memorialTableData().UnitText[strconv.Itoa(unitID)]
+	if e == nil {
+		return "", false
+	}
+	v, ok := e[key].(string)
+	if !ok || v == "" {
+		return "", false
+	}
+	return v, true
+}
+
+// memorialUnitIntOverride 数值覆盖（life/atk/type），JSON 数字按 float64 解码。
+func memorialUnitIntOverride(unitID int, key string) (int, bool) {
+	e := memorialTableData().UnitText[strconv.Itoa(unitID)]
+	if e == nil {
+		return 0, false
+	}
+	v, ok := e[key].(float64)
+	if !ok {
+		return 0, false
+	}
+	return int(v), true
+}
+
 // memorialMonsterEntry 魔宠纪念版条目原始 map（含 catalog_fill 子表——
 // 它是生成元数据不是下发键，应用层须跳过）。官方样本怪在 monster_official。
 func memorialMonsterEntry(monsterID int) (map[string]any, bool) {

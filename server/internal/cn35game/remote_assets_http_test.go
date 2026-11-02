@@ -92,6 +92,12 @@ func TestRemoteBundleOverlayHTTP(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bundles, "sound", "B-99.Android.9.unity3d"), fallback, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(bundles, "common"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundles, "common", "bg-house_2.Android.unity3d"), fallback, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ts, _, _ := testServerRemote(t, remote, bundles)
 
 	get := func(path string) (int, []byte) {
@@ -111,7 +117,8 @@ func TestRemoteBundleOverlayHTTP(t *testing.T) {
 		{"/toto_image_4/unity/unit/unit_list_414.Android.1.unity3d", listBytes},
 		{"/toto_image_4/unity/monster_v2/monster_39.Android.1.unity3d", monBytes},
 		{"/toto_image_4/unity/effect_ss_v2/effect_999.Android.1.unity3d", effBytes},
-		{"/toto_image_4/unity/sound/B-99.Android.9.unity3d", fallback}, // BundlesDir 兜底
+		{"/toto_image_4/unity/sound/B-99.Android.9.unity3d", fallback},        // BundlesDir 精确文件名兜底
+		{"/toto_image_4/unity/common/bg-house_2.Android.1.unity3d", fallback}, // BundlesDir 逻辑名无版本号兜底
 	}
 	for _, c := range cases {
 		code, body := get(c.path)

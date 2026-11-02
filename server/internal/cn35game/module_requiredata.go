@@ -100,10 +100,15 @@ func registerModuleRequireData(register func(method, path, note string, handler 
 	// UserAlbum/UserMonsterAlbum，Home.DeckBtn→UserDecks）----
 	// albums/monster_albums 为图鉴领取态（FindByKey(id) 消费，AlbumUnitDetail.cs:136
 	// /AlbumMonsterDetail.cs:42）；领取写面 /albums/wait|back 不在本批开放。
-	reg("/albums/", "CN 3.5.0 同伴图鉴态（UserUnits/UserAlbum requireData.albums；空态）",
-		"albums", []string{"albums"}, nil)
-	reg("/monster_albums/", "CN 3.5.0 魔宠图鉴态（UserMonsterAlbum requireData.monster_albums；空态）",
-		"monster_albums", []string{"monster_albums"}, nil)
+	// ALBUM350-01：装配 Inventory+Catalog 时 /albums/ 走真实图鉴读面
+	// （cn35game.go 注册，album_wire.go：全目录 + hide=未持有标记 +
+	// album_detail_message/album_unit 详情路径），此处不再占空态。
+	if dep.Inventory == nil || dep.Catalog == nil {
+		reg("/albums/", "CN 3.5.0 同伴图鉴态（UserUnits/UserAlbum requireData.albums；空态）",
+			"albums", []string{"albums"}, nil)
+		reg("/monster_albums/", "CN 3.5.0 魔宠图鉴态（UserMonsterAlbum requireData.monster_albums；空态）",
+			"monster_albums", []string{"monster_albums"}, nil)
+	}
 	// 道具/章节：账号侧无对应库表与种子，空集=账号真值。
 	// RUNE350-01：装配 Skills 时 /user_skills/ 走真实库存投影
 	// （cn35game.go 注册），此处不再占空态。
@@ -152,18 +157,42 @@ func registerModuleRequireData(register func(method, path, note string, handler 
 		if e.path == "/medal_items/" && dep.Medal != nil && dep.Items != nil {
 			continue
 		}
+		// LOGIN350-01/02：装配 LoginBonus 时 /users/show_login_bonus 走真实读面
+		// （data.user + 泉水待领量 show_login_bonus），不再下发空 login_bonus 对象。
+		if dep.LoginBonus != nil && e.path == "/users/show_login_bonus" {
+			continue
+		}
+		// LOGIN350-02：装配 Signin 时 /accu_login_activity/ 走真实读面
+		// （data.acc_login_rewards 为 28 行数组）。必须在这里 skip：本 sweep 在
+		// Register 早段执行，重复注册会被 HandleWithStatus 静默丢弃。
+		if dep.Signin != nil && e.path == "/accu_login_activity/" {
+			continue
+		}
 		// SHOP350-01：装配 DailyShop 时 /red_diamond_shop/ 走真实商品读面，
 		// /users/function_portal 走主人公日常入口真实读面。
 		if dep.DailyShop != nil &&
 			(e.path == "/red_diamond_shop/" || e.path == "/users/function_portal") {
 			continue
 		}
+		if e.path == "/user_monsters/evolve_select_info" {
+			continue
+		}
 		// GUILD350：装配 Guild 时公会域/排名/waiting_users 走真实端点。
+		// GC-08：/battles/comments 也归公会社交面（guild_social_wire.go），
+		// 这里必须让位——本 sweep 早于 registerGuildRoutes 执行，重复注册会
+		// 把真实处理器静默丢弃，只剩 battle_comments=[] 的错类型空态。
 		if dep.Guild != nil {
 			switch e.path {
 			case "/guilds/", "/guilds/deck", "/guilds/monsters",
 				"/guilds/search_index", "/guilds/subscriptions",
-				"/guild_rankings", "/waiting_users", "/waiting_users/recruit":
+				"/guild_rankings",
+				// GC-06：两张赛季奖励静态表由 guild_wire.go 的
+				// guildRankingsItemRewardsHandler / guildRankingsSkillRewardsHandler
+				// 从 assets/cn350 读真实配置下发。本 sweep 早于 registerGuildRoutes，
+				// 不跳过就会把 8 档 / 250 行的真实读面静默覆盖成 [] 空态。
+				"/guild_rankings/item_rewards", "/guild_rankings/skill_rewards",
+				"/waiting_users", "/waiting_users/recruit",
+				"/battles/comments":
 				continue
 			}
 		}
@@ -308,7 +337,12 @@ var requireDataSweepTable = []requireDataSweepEntry{
 	{"/users/function_portal", "users_function_portal", []string{"function_portal", "function_portal_list"}},
 	{"/users/show_login_bonus", "users_show_login_bonus", []string{"login_bonus"}},
 	{"/users/user_memo/", "users_user_memo", []string{"user_memo"}},
-	{"/waiting_users", "waiting_users", []string{"guild_subscriptions"}},
+	// GC-08：原服 /waiting_users 的响应键是 waiting_users（录包
+	// decrypted/1/waiting_users.json），不是 guild_subscriptions；
+	// 装配 Guild 时上面 switch 已跳过本行（真实处理器在
+	// guild_social_wire.go），这里只修「未装配 Guild」降级态的键名，
+	// 避免留下一个错键的空态陷阱。
+	{"/waiting_users", "waiting_users", []string{"waiting_users"}},
 	{"/waiting_users/recruit", "waiting_users_recruit", []string{"temp_search_indexes"}},
 }
 

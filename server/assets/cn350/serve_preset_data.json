@@ -1,6 +1,6 @@
 {
  "_doc": "CN350 preset_data 静态骨架。字段消费证据：ilspy-cs/Common.cs LoadPresetData/UpdateTimeDiff/SetAppConf、DataCache.UpdateConst、TutorialQuest.AddTutorialQuestReward。data.user/data.user_coin/data.user_summary 为玩家态，由服务端按账号注入（见 playercore.WireUser 与 CN350-09），本 fixture 不提供。注意：本文件不经 appconf.RenderWire，\"_\" 注解键不会被剥离，会原样进入客户端 cache；如需注解请写在本 _doc 内，勿新增其它 _ 键。",
- "_act_pages_removed": "【UI-HOME-FIX-20260926】原 \"act_pages\": [] 已整体移除，勿加回。空数组会被 DataCache.Add 写入 cache[\"act_pages\"] → common.activityList=[]（DataCache.cs:265-267）；随后 PageBase.LoadAllData→DataCache.DataLoad 见 cache 已有该键即跳过请求（DataCache.cs:115），使 app_conf pages.Home.requireData.act_pages 声明的 /act_pages 永不发出（实机 logcat 零命中）。空 activityList 令 CarouselBannerParts.UpdateContents 的 dictionary.Count==0 直接 return（CarouselBannerParts.cs:126-129）→ 轮播一行不建（只剩左右箭头）；同因 BasicParts 的 top_activity 分支要求 activityList.Count>0（BasicParts.cs:221）→ 右上活动大图静默空白。此坑与 business.go:155-162 为 /gachas 记录的同类（preset_data 预置键会吞掉 requireData 请求）。",
+ "_act_pages_removed": "【ACT-BANNER-01 2026-10-21】act_pages 不写进 fixture，由 presetDataHandler 按 activityPageWhitelist 注入（data.act_pages + data.act_has_new），单一真源在 server/internal/cn35game/activity.go。历史教训（UI-HOME-FIX-20260926）保留：若把空数组 \"act_pages\": [] 写进本 fixture，DataCache.Add 会先占住 cache[\"act_pages\"]（DataCache.cs:265-267）→ common.activityList 为空，且 PageBase.LoadAllData→DataCache.DataLoad 见 cache 已有键即跳过请求（DataCache.cs:115），活动位永远空白。",
  "_dynamic_fields": [
   "data.consts.time",
   "data.consts.stamp"

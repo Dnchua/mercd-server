@@ -47,6 +47,23 @@ type CN35Config struct {
 	RemoteAssetsDir string
 	// RemoteAssetsScan 远端目录扫描周期；0=仅启动时扫描一次。
 	RemoteAssetsScan time.Duration
+
+	// GuildSolo 单机 NPC 公会域开关（GUILDLIFE350-04）：开启时搜索/入会
+	// 会维护「19/20 候选 + 稳定对手」持久池；关闭后停止补池与候选推荐，
+	// 既有 NPC 公会仍可读/可退出（不删档）。
+	GuildSolo          bool
+	GuildDailyRefill   bool
+	GuildSeasonRewards bool
+	// GuildSoloCandidates 期望「仍有空位」的候选公会数（0..12）。
+	GuildSoloCandidates int
+	// GuildSoloOpponents 期望的持久对手公会数（0..6，公会战敌会来源）。
+	GuildSoloOpponents int
+	// GuildSoloMaxGuilds NPC 公会池总量上限（有界补充，1..60）。
+	GuildSoloMaxGuilds int
+	// GuildClockOffset 公会战判定时钟偏移（验收/排障用测试手段，默认 0=真实时钟）。
+	// 只影响「时窗/日场/结算判定」用到的 now，不改写任何落库时间戳，
+	// 也不改系统时间；用于在非 12:00-13:00 / 20:00-21:00 时段做实机会战验收。
+	GuildClockOffset time.Duration
 }
 
 // BindCN35 注册 mercd35 的 flag 集。
@@ -70,6 +87,18 @@ func (c *CN35Config) BindCN35(fs *flag.FlagSet) {
 	fs.DurationVar(&c.RemoteAssetsScan, "remote-assets-scan", 30*time.Second,
 		"远端资源目录扫描周期（0=仅启动时扫描一次）")
 
+	fs.BoolVar(&c.GuildDailyRefill, "guild-solo-daily-refill", false, "单机重建：每日首次访问补满蓄水库（非原服规则）")
+	fs.BoolVar(&c.GuildSeasonRewards, "guild-solo-season-rewards", false, "单机重建：月结按贡献归属发奖（非原服规则）")
+	fs.BoolVar(&c.GuildSolo, "guild-solo", true,
+		"单机 NPC 公会域（19/20 候选公会 + 持久对手，免审加入；关闭=停止补池与推荐，保留既有存档）")
+	fs.IntVar(&c.GuildSoloCandidates, "guild-solo-candidates", 3,
+		"单机候选公会数（仍有 1 个真人空位的 19/20 公会；0..12）")
+	fs.IntVar(&c.GuildSoloOpponents, "guild-solo-opponents", 3,
+		"单机持久对手公会数（公会战敌会，0..6）")
+	fs.IntVar(&c.GuildSoloMaxGuilds, "guild-solo-max", 24,
+		"单机 NPC 公会池总量上限（有界补充，1..60）")
+	fs.DurationVar(&c.GuildClockOffset, "guild-clock-offset", 0,
+		"公会战判定时钟偏移（验收/排障测试手段；只影响时窗判定，默认 0）")
 }
 
 // ValidateCN35 校验并归一化配置。
@@ -98,7 +127,7 @@ func (c *CN35Config) ValidateCN35() error {
 		return fmt.Errorf("config: CN3.5 cards 目录不可用 %q: %v", c.CardsDir, err)
 	}
 	if c.BundlesDir == "" {
-		c.BundlesDir = filepath.Join(c.AssetsDir, "bundles")
+		c.BundlesDir = resolveCN35BundlesDir(c.AssetsDir)
 	}
 	if c.StateDir == "" {
 		return fmt.Errorf("config: state 目录不能为空")
@@ -121,6 +150,22 @@ func (c *CN35Config) ValidateCN35() error {
 
 func resolveCN35AssetsDir(path string) string {
 	return resolveCN35Dir(path, DefaultCN35AssetsDir)
+}
+
+func resolveCN35BundlesDir(assetsDir string) string {
+	def := filepath.Join(assetsDir, "bundles")
+	if dirExists(def) {
+		return def
+	}
+	for _, cand := range []string{
+		filepath.Join("client", "decoded", "assets", "unity"),
+		filepath.Join("..", "client", "decoded", "assets", "unity"),
+	} {
+		if dirExists(cand) {
+			return cand
+		}
+	}
+	return def
 }
 
 // resolveCN35Dir 默认相对目录兜底：从仓库根启动时回退到 server/<默认>。

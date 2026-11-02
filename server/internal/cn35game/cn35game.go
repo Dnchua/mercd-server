@@ -138,6 +138,21 @@ type Deps struct {
 	// 面包店 /red_diamond_shop/* 每日 0 元购钻石包）。nil 时
 	// /red_diamond_shop/ 走 sweep 空态、buy/refresh 不注册。
 	DailyShop DailyShopStore
+	// LoginBonus 不可思议之泉读/领面（LOGIN350-02，迁移 0035：按时间累积金币/
+	// 公会建设素材/BP，BP 允许溢出）。nil 时 /users/show_login_bonus 保持
+	// requireData 空态、/users/receive_login_bonus 不注册。
+	LoginBonus SpringStore
+	// Signin 每月 28 格签到读/领面（LOGIN350-02，迁移 0035）。nil 时
+	// /accu_login_activity/ 走 requireData 空态、receive 不注册。
+	Signin SigninStore
+	// Adventure 登录冒险读/发面（LOGIN350-03，迁移 0036：轮次配置 + 逐日
+	// 位图 + 当日奖励写入 /user_presents/ 内容池 + 轮次滚动）。nil 时
+	// /adventure/ 保持历史空态（结构完整、客户端跳过分支，不报错）；
+	// 库里未配置轮次时同样回该空态，故运营未排期即不弹窗。
+	Adventure AdventureStore
+	// AdventureClock 登录冒险的判定时钟（LA-09 跨天/时钟对抗向量注入）。
+	// nil 用 time.Now；生产路径不设置。
+	AdventureClock func() time.Time
 }
 
 // Register 注册 CN 3.5.0 启动必经路由，返回登记数。
@@ -237,6 +252,18 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 		"CN 3.5.0 消息面（Top 轮询空类别字典）", usersMessagesHandler(dep))
 	register(http.MethodPost, "/users/messages",
 		"CN 3.5.0 消息面 POST 形态", usersMessagesHandler(dep))
+	register(http.MethodGet, "/users/show",
+		"CN 3.5.0 玩家主页读面（UserPage requireData.user_temp）", usersShowHandler(dep))
+	register(http.MethodPost, "/users/show",
+		"CN 3.5.0 玩家主页读面 POST 形态", usersShowHandler(dep))
+	register(http.MethodGet, "/users/update_memo",
+		"CN 3.5.0 玩家签名更新（UserPage.OnMemoChange）", usersUpdateMemoHandler(dep))
+	register(http.MethodPost, "/users/update_memo",
+		"CN 3.5.0 玩家签名更新 POST 形态", usersUpdateMemoHandler(dep))
+	register(http.MethodGet, "/users/help",
+		"CN 3.5.0 玩家救援写面", usersHelpHandler(dep))
+	register(http.MethodPost, "/users/help",
+		"CN 3.5.0 玩家救援写面 POST 形态", usersHelpHandler(dep))
 	// CN35-UI-RESTORE：活动页 id 列表。客户端 BasicParts(top_activity) 与
 	// CarouselBannerParts 都经 common.activityList 取键，再查 app_conf
 	// partials.CarouselBannerPartial.CarouselBanner.banners 取图。
@@ -248,8 +275,9 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 	// LEGACY-ASSETS-02：真实 app_conf（v201710121006）Home.requireData 的四条依赖。
 	// 此前手写 v44 未声明它们，故从未注册；缺任一条客户端即
 	// ShowErrorModal + CancelShowPage（PageBase.cs:782-800）。
-	// user_presents/infos 为运营内容（0015 入库）；adventure/choose_attr_page
-	// 本期无生产数据，回结构完整空态（契约卡 22.6 标注语义未证）。
+	// user_presents/infos 为运营内容（0015 入库）；choose_attr_page 无生产数据
+	// 来源，回结构完整空态（契约卡标注语义未证）；adventure 自 LOGIN350-03
+	// （0036）起为真实读面，未配置轮次时回同一空态（见 requiredata.go）。
 	register(http.MethodGet, "/user_presents/",
 		"CN 3.5.0 待领礼物列表（Home requireData.user_presents）",
 		userPresentsHandler(dep))
@@ -260,7 +288,7 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 	register(http.MethodPost, "/infos/index",
 		"CN 3.5.0 公告面 POST 形态", infosHandler(dep))
 	register(http.MethodGet, "/adventure/",
-		"CN 3.5.0 登录冒险（Home requireData.LoginAdventureData；空态）",
+		"CN 3.5.0 登录冒险读面+当日发放（LOGIN350-03，0036 轮次配置；未配置回空态）",
 		adventureHandler(dep))
 	register(http.MethodPost, "/adventure/",
 		"CN 3.5.0 登录冒险 POST 形态", adventureHandler(dep))
@@ -307,6 +335,38 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 		userMonstersHandler(dep))
 	register(http.MethodPost, "/user_monsters",
 		"CN 3.5.0 魔宠列表 POST 形态", userMonstersHandler(dep))
+
+	// ALBUM350-01 图鉴读面（cn35-album-ui-restore）：/albums/ 全目录
+	// （未持有行 hide=true，计数 N/M 不再 0/0）+ /albums/album_unit
+	// 未持有详情（AlbumUnitDetail data_path 目标）。未装配时
+	// module_requiredata.go 空态桩兜底（见该文件 ALBUM350-01 注释）。
+	if dep.Inventory != nil && dep.Catalog != nil {
+		register(http.MethodGet, "/albums/",
+			"CN 3.5.0 同伴图鉴全目录（持有/未持有 hide 标记+详情入口）",
+			albumsHandler(dep))
+		register(http.MethodPost, "/albums/",
+			"CN 3.5.0 同伴图鉴全目录 POST 形态", albumsHandler(dep))
+		register(http.MethodGet, "/albums/album_unit",
+			"CN 3.5.0 图鉴未持有单位详情（Lv1 模板态数值）",
+			albumUnitDetailHandler(dep))
+		register(http.MethodPost, "/albums/album_unit",
+			"CN 3.5.0 图鉴未持有单位详情 POST 形态", albumUnitDetailHandler(dep))
+		register(http.MethodGet, "/albums/show_unit",
+			"CN 3.5.0 原服图鉴单位详情（兼容 unit_id/id）",
+			albumUnitDetailHandler(dep))
+		register(http.MethodPost, "/albums/show_unit",
+			"CN 3.5.0 原服图鉴单位详情 POST 形态", albumUnitDetailHandler(dep))
+		register(http.MethodGet, "/monster_albums/",
+			"CN 3.5.0 魔宠图鉴全目录（持有/未持有 hide 标记+详情入口）",
+			monsterAlbumsHandler(dep))
+		register(http.MethodPost, "/monster_albums/",
+			"CN 3.5.0 魔宠图鉴全目录 POST 形态", monsterAlbumsHandler(dep))
+		register(http.MethodGet, "/monster_albums/show_monster",
+			"CN 3.5.0 魔宠图鉴详情（Lv1 模板态数值）",
+			monsterAlbumDetailHandler(dep))
+		register(http.MethodPost, "/monster_albums/show_monster",
+			"CN 3.5.0 魔宠图鉴详情 POST 形态", monsterAlbumDetailHandler(dep))
+	}
 
 	// STAT350-05A 正常等级训练写面：只改 level，扣 gacha_point，回推读面。
 	// 05B/05C/05D 闸门未过 → 不注册对应端点（不伪造写面）。
@@ -398,6 +458,11 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 			monsterPowerupHandler(dep))
 		register(http.MethodPost, "/user_monsters/powerup",
 			"CN 3.5.0 魔宠强化 POST 形态", monsterPowerupHandler(dep))
+		register(http.MethodGet, "/user_monsters/evolve_select_info",
+			"CN 3.5.0 魔宠进化选择列表（MonsterEvolveModal requireData）",
+			monsterEvolveSelectInfoHandler(dep))
+		register(http.MethodPost, "/user_monsters/evolve_select_info",
+			"CN 3.5.0 魔宠进化选择列表 POST 形态", monsterEvolveSelectInfoHandler(dep))
 	} else {
 		dep.log().Warn("CN3.5 未装配 MonsterOps（跳过 on/off/protect/powerup）")
 	}
@@ -435,6 +500,18 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 			userItemsHandler(dep))
 		register(http.MethodPost, "/user_items/",
 			"CN 3.5.0 道具列表 POST 形态", userItemsHandler(dep))
+		register(http.MethodGet, "/user_units/compose_upgrade_item",
+			"CN 3.5.0 进化素材合成（UserItemsListRow count_modal_hash）",
+			unitComposeUpgradeItemHandler(dep, false))
+		register(http.MethodPost, "/user_units/compose_upgrade_item",
+			"CN 3.5.0 进化素材合成 POST 形态",
+			unitComposeUpgradeItemHandler(dep, false))
+		register(http.MethodGet, "/user_units/decompose_upgrade_item",
+			"CN 3.5.0 进化素材分解（UserItemsListRow count_modal_hash）",
+			unitComposeUpgradeItemHandler(dep, true))
+		register(http.MethodPost, "/user_units/decompose_upgrade_item",
+			"CN 3.5.0 进化素材分解 POST 形态",
+			unitComposeUpgradeItemHandler(dep, true))
 	}
 	// TASK350：新手任务读面+领取写面（替代 requiredata 空态——空文档
 	// 使新手指引页 ListParts 走早退路径，真机实测导航失效需 force-stop）。
@@ -499,6 +576,31 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 			functionPortalHandler(dep))
 		register(http.MethodPost, "/users/function_portal",
 			"CN 3.5.0 主人公日常入口列表 POST 形态", functionPortalHandler(dep))
+	}
+	// LOGIN350-02 不可思议之泉（时间累积）读面与领取写面。
+	if dep.LoginBonus != nil {
+		register(http.MethodGet, "/users/show_login_bonus",
+			"CN 3.5.0 泉水读面（show_login_bonus 待领量+user；不发奖）",
+			loginBonusShowHandler(dep))
+		register(http.MethodPost, "/users/show_login_bonus",
+			"CN 3.5.0 泉水读面 POST 形态", loginBonusShowHandler(dep))
+		register(http.MethodGet, "/users/receive_login_bonus",
+			"CN 3.5.0 泉水领取（同事务 CAS 推进+三资源入账+台账）",
+			loginBonusReceiveHandler(dep))
+		register(http.MethodPost, "/users/receive_login_bonus",
+			"CN 3.5.0 泉水领取 POST 形态", loginBonusReceiveHandler(dep))
+	}
+	// LOGIN350-02 每月 28 格签到读面与领取写面。
+	if dep.Signin != nil {
+		register(http.MethodGet, "/accu_login_activity/",
+			"CN 3.5.0 月签到列表（acc_login_rewards 28 行）", signinShowHandler(dep))
+		register(http.MethodPost, "/accu_login_activity/",
+			"CN 3.5.0 月签到列表 POST 形态", signinShowHandler(dep))
+		register(http.MethodGet, "/accu_login_activity/receive",
+			"CN 3.5.0 月签到领取（?node=1..28，台账+入账同事务）",
+			signinClaimHandler(dep))
+		register(http.MethodPost, "/accu_login_activity/receive",
+			"CN 3.5.0 月签到领取 POST 形态", signinClaimHandler(dep))
 	}
 	// RUNE350-01 符文读面与写面（装配 Skills 时取代 requiredata 空态）。
 	if dep.Skills != nil {

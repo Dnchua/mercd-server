@@ -79,6 +79,7 @@ func presentReceiveHandler(dep Deps) httpapi.Handler {
 			return nil, err
 		}
 		data["user_presents"] = presentListDocs(dep, remaining)
+		data["messages"] = presentReceiveMessagesDoc(now)
 
 		rewards := make([]any, 0, len(res.Granted))
 		for _, g := range res.Granted {
@@ -103,6 +104,53 @@ func presentListDocs(dep Deps, records []PresentRecord) []any {
 		items = append(items, presentRowDoc(dep, r))
 	}
 	return items
+}
+
+func presentReceiveMessagesDoc(now int64) map[string]any {
+	createdAt := now - 5
+	return map[string]any{
+		"battle_activity": []any{
+			map[string]any{
+				"addition": "", "created_at": createdAt, "id": "ba-1",
+				"text": "祈祷了！", "type_id": "battle_activity", "unit_id": int64(1), "user_id": "npc-1",
+			},
+		},
+		"community_comment": []any{
+			map[string]any{
+				"created_at": createdAt, "help_id": "", "helped_at": int64(0), "id": "cc-1",
+				"stamp": "", "text": "大家好！", "type_id": "community_comment",
+				"unit_id": int64(1), "user_id": "npc-1", "user_name": "旅人",
+			},
+		},
+		"community_help": []any{
+			map[string]any{
+				"created_at": createdAt, "help_id": "", "helped_at": int64(0), "id": "ch-1",
+				"text": "请求救援！", "type_id": "community_help",
+				"unit_id": int64(1), "user_id": "npc-1", "user_name": "旅人",
+			},
+		},
+		"community_raid_call": []any{},
+		"guild_comment": []any{
+			map[string]any{
+				"created_at": createdAt, "help_id": "", "helped_at": int64(0), "id": "gc-1",
+				"stamp": "", "text": "请多多关照！", "type_id": "guild_comment",
+				"unit_id": int64(1), "user_id": "npc-1", "user_name": "旅人",
+			},
+		},
+		"guild_help": []any{
+			map[string]any{
+				"created_at": createdAt, "help_id": "", "helped_at": int64(0), "id": "gh-1",
+				"text": "请求救援！", "type_id": "guild_help",
+				"unit_id": int64(1), "user_id": "npc-1", "user_name": "旅人",
+			},
+		},
+		"user_comment": []any{
+			map[string]any{
+				"created_at": createdAt, "id": "uc-1", "private": false,
+				"text": "欢迎来到梅露可物语！", "type_id": "user_comment", "user_name": "梅露可",
+			},
+		},
+	}
 }
 
 // presentRowDoc 单行礼物文档：行级字段 + content 嵌套文档。

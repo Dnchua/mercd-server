@@ -104,8 +104,9 @@ func TestUserNeedExpCappedVectors(t *testing.T) {
 	}
 }
 
-// TestUserExpWindowVectors 结算条两档窗口；1 级 [100,100] 必须与生产抓包
-// serve_quest_execute_1.json 逐值一致。
+// TestUserExpWindowVectors 结算条等级需求窗口：本级起 32 档（窗口须覆盖
+// 单场跨级，见 UserExpWindow 注释）；前缀值与生产抓包
+// serve_quest_execute_1.json 的 [100,100] 逐值一致。
 func TestUserExpWindowVectors(t *testing.T) {
 	vectors := map[int][2]int64{
 		1:    {100, 100},
@@ -113,14 +114,22 @@ func TestUserExpWindowVectors(t *testing.T) {
 		5:    {100, 400},
 		6:    {400, 1000},
 		2098: {4200000, 4200000},
-		2099: {4200000, 4200000},
-		2100: {4200000, 4200000}, // 封顶回退末档
 	}
 	for lv, want := range vectors {
 		got := UserExpWindow(lv)
 		if got[0] != want[0] || got[1] != want[1] {
-			t.Fatalf("UserExpWindow(%d) = %v, want %v", lv, got, want)
+			t.Fatalf("UserExpWindow(%d) 前缀 = %v, want %v", lv, got[:2], want)
 		}
+	}
+	if got := UserExpWindow(1); len(got) != userExpWindowSize {
+		t.Fatalf("UserExpWindow(1) 长度 = %d, want %d", len(got), userExpWindowSize)
+	}
+	// 表尾截到末档非 0 需求（needExpTable 末位 0 占位不可作除法分母）。
+	if got := UserExpWindow(2099); len(got) != 1 || got[0] != 4200000 {
+		t.Fatalf("UserExpWindow(2099) = %v, want [4200000]", got)
+	}
+	if got := UserExpWindow(2100); len(got) != 1 || got[0] != 4200000 {
+		t.Fatalf("UserExpWindow(2100) = %v, want [4200000]（封顶回退末档）", got)
 	}
 }
 

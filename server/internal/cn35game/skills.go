@@ -310,8 +310,11 @@ func applyUnitSkills(doc map[string]any, rare, dup int, skills []PlayerSkill) {
 	for _, s := range skills {
 		if s.UnitID != nil {
 			equipped = append(equipped, map[string]any{
-				"uuid":     s.UUID,
-				"skill_id": s.SkillID,
+				"uuid":      s.UUID,
+				"skill_id":  s.SkillID,
+				"level":     s.Level,
+				"protected": s.Protected,
+				"unit_id":   *s.UnitID,
 			})
 		}
 	}

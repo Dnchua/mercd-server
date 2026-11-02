@@ -22,7 +22,7 @@ func TestGWExecuteEffectsAndBossTable(t *testing.T) {
 			{OwnerUserID: "two", GuildID: "b", Slot: 0, MonsterID: 3, Level: 1},
 		},
 	}
-	doc, err := buildGWExecuteDoc(dep, atk, []UnitRecord{rec}, nil, &PlayerSnapshot{User: map[string]any{}})
+	doc, err := buildGWExecuteDoc(dep, atk, []UnitRecord{rec}, nil, &PlayerSnapshot{User: map[string]any{}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,9 +85,49 @@ func TestGWExecuteEffectsAndBossTable(t *testing.T) {
 	}
 	// Legacy attacks remain renderable with the original SP baseline.
 	atk.Effects = GWEffects{}
-	doc, err = buildGWExecuteDoc(dep, atk, []UnitRecord{rec}, nil, &PlayerSnapshot{User: map[string]any{}})
+	doc, err = buildGWExecuteDoc(dep, atk, []UnitRecord{rec}, nil, &PlayerSnapshot{User: map[string]any{}}, nil)
 	if err != nil || doc["quest"].(map[string]any)["initial_power"] != 500 {
 		t.Fatalf("legacy effects: %v", err)
+	}
+}
+
+// quest.id = **目标公会 id**（GC-05 取证）：原服样本 b9b76114-… 同时是
+// battle_condition.guilds 里的目标会 id 与 ap_use_url 的 guild_id 参数，契约
+// 要求 string。此前按 battleID 前 8 位十六进制派生成数字，是为绕开客户端
+// 文档池去重；复核 Quest.cs:637-643 后确认去重条件是
+// `pageMessage.data["id"]` 与 quest.id 比较，而会战页消息只带 guild_id、不带
+// id ⇒ 池恒为 null，不会复用上一场文档，故不再需要唯一 id。
+func TestGWQuestDocIDIsTargetGuild(t *testing.T) {
+	cat, err := cardcatalog.Load(filepath.Join("..", "..", "assets", "shared", "cards"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dep := Deps{Catalog: cat, AssetsDir: filepath.Join("..", "..", "assets", "cn350")}
+	rec := UnitRecord{UnitID: 348, Level: 1}
+	mk := func(target string) map[string]any {
+		atk := &GWAttack{BattleID: "bg1234567890abcdef1234", UserID: "t",
+			Difficulty: "normal", TargetGuildID: target, TargetGuildIDs: []string{target}}
+		doc, err := buildGWExecuteDoc(dep, atk, []UnitRecord{rec}, nil,
+			&PlayerSnapshot{User: map[string]any{}}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return doc["quest"].(map[string]any)
+	}
+	quest := mk("guild-target-a")
+	if id, ok := quest["id"].(string); !ok || id != "guild-target-a" {
+		t.Fatalf("quest.id = %#v, want 目标会 id 字符串", quest["id"])
+	}
+	// 同一目标、不同 battleID 也必须是同一 id（原服语义：id 是目标会，不是会话）。
+	if again := mk("guild-target-a"); again["id"] != quest["id"] {
+		t.Fatalf("quest.id 不应随 battleID 变化: %#v", again["id"])
+	}
+	if other := mk("guild-target-b"); other["id"] == quest["id"] {
+		t.Fatal("不同目标会应产出不同 quest.id")
+	}
+	// name 形状："vs <会名>(<目标数>个公会)"；无 battle_condition 供名时用占位名。
+	if name, _ := quest["name"].(string); name != "vs 目标公会(1个公会)" {
+		t.Fatalf("quest.name = %q", name)
 	}
 }
 

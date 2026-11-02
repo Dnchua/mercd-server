@@ -4,83 +4,116 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-// TestActPagesIDsMatchAppConfBanners 断言 /act_pages 返回的 id 与 app_conf
-// partials.CarouselBannerPartial.CarouselBanner.banners 的键集一致。
-//
-// 这是客户端 BasicParts(top_activity) 的硬要求：它取 activityList[0] 作键去查
-// appConfBanners，查不到则 docHash 返回 null → 大图静默不显示
-// （BasicParts.cs:216-232 有 try/catch，不会报错）。
-// 二者是同一份配置的两半，漂移即静默失败，故必须由测试锁住。
-//
-// 2026-09-27（LEGACY-ASSETS-01）：真实关服前配置接入后，/act_pages 的 id 由
-// app_conf 实况派生（loadActivityPageIDs），本测试即断言该派生结果与配置一致，
-// 并锁住「首项必须可出图」与「资源走 common/*」两条客户端约束。
-func TestActPagesIDsMatchAppConfBanners(t *testing.T) {
+// activityConfFixture 只解析本包需要的 app_conf 片段。
+type activityConfFixture struct {
+	Pages map[string]struct {
+		RequireData map[string]struct {
+			Path string `json:"path"`
+		} `json:"requireData"`
+	} `json:"pages"`
+	Partials struct {
+		CarouselBannerPartial struct {
+			CarouselBanner struct {
+				Banners map[string]struct {
+					AssetName    string `json:"asset_name"`
+					BigAssetName string `json:"big_assetname"`
+					IsShow       *bool  `json:"isShow"`
+					OnClick      struct {
+						Method  string `json:"method"`
+						Message string `json:"message"`
+					} `json:"OnClick"`
+				} `json:"banners"`
+			} `json:"CarouselBanner"`
+		} `json:"CarouselBannerPartial"`
+	} `json:"partials"`
+}
+
+func loadActivityConfFixture(t *testing.T) (activityConfFixture, string) {
+	t.Helper()
 	assetsDir := filepath.Join("..", "..", "assets", "cn350")
-	confPath := filepath.Join(assetsDir, "serve_app_conf_android.json")
-	raw, err := os.ReadFile(confPath)
+	raw, err := os.ReadFile(filepath.Join(assetsDir, "serve_app_conf_android.json"))
 	if err != nil {
 		t.Skipf("跳过：读不到 app_conf（%v）", err)
 	}
-	var conf struct {
-		Partials struct {
-			CarouselBannerPartial struct {
-				CarouselBanner struct {
-					Banners map[string]struct {
-						AssetName    string `json:"asset_name"`
-						BigAssetName string `json:"big_assetname"`
-					} `json:"banners"`
-				} `json:"CarouselBanner"`
-			} `json:"CarouselBannerPartial"`
-		} `json:"partials"`
-	}
+	var conf activityConfFixture
 	if err := json.Unmarshal(raw, &conf); err != nil {
 		t.Fatalf("解析 app_conf: %v", err)
 	}
+	return conf, assetsDir
+}
+
+// TestActivityWhitelistMatchesAppConf 断言活动位白名单与 app_conf 同源且可跳转。
+//
+// ACT-BANNER-01（2026-10-21）：/act_pages 与 preset_data.data.act_pages 改为按
+// activityPageWhitelist 下发（不再把 banners 全部 55 键抛给客户端）。白名单是
+// 客户端 common.activityList 的唯一来源，三项约束都必须锁死，否则表现为
+// 轮播/活动列表出现空白条目或点击进入空壳页：
+//  1. 键必须存在于 partials.CarouselBannerPartial.CarouselBanner.banners
+//     （CarouselBannerParts 用它查 appConfBanners，查不到即无图）；
+//  2. OnClick.message 的 name= 目标页必须存在于 pages
+//     （否则 PageBase.SetOption 仅告警 "Conf is Empty"，打开空白页）；
+//  3. 横幅图必须走 common/*（CN3.5 只有该通道可出图）；
+//  4. 不得选 isShow:false 的键（轮播会过滤，但 ActivityInfoListRow 不过滤，
+//     会以「活动列表里有、轮播里没有」的矛盾状态出现）。
+func TestActivityWhitelistMatchesAppConf(t *testing.T) {
+	conf, _ := loadActivityConfFixture(t)
 	banners := conf.Partials.CarouselBannerPartial.CarouselBanner.Banners
 	if len(banners) == 0 {
 		t.Fatal("app_conf 未定义 banners")
 	}
-
-	ids := loadActivityPageIDs(assetsDir)
-
-	// 1) 每个 /act_pages id 必须命中 banners 键。
-	for _, id := range ids {
-		if _, ok := banners[id]; !ok {
-			t.Fatalf("/act_pages 含 id %q，但 app_conf banners 无此键（大图将静默不显示）", id)
+	if len(activityPageWhitelist) == 0 {
+		t.Fatal("activityPageWhitelist 为空：activityList 空会让轮播/活动列表整体空白")
+	}
+	for _, id := range activityPageWhitelist {
+		b, ok := banners[id]
+		if !ok {
+			t.Fatalf("白名单键 %q 不在 app_conf banners 中（轮播无图、活动列表也取不到文案）", id)
+		}
+		msg := b.OnClick.Message
+		name := ""
+		for _, part := range strings.Split(msg, "&") {
+			if strings.HasPrefix(part, "name=") {
+				name = strings.TrimPrefix(part, "name=")
+			}
+		}
+		if name == "" {
+			t.Fatalf("banners[%q].OnClick.message 未声明 name=（无法跳转）：%q", id, msg)
+		}
+		if _, ok := conf.Pages[name]; !ok {
+			t.Fatalf("banners[%q] 目标页 %q 不在 app_conf pages 中：跳转会打开空白壳页", id, name)
+		}
+		if b.AssetName == "" {
+			t.Fatalf("banners[%q] 缺 asset_name：轮播无图可取", id)
+		}
+		if !strings.HasPrefix(b.AssetName, "common/") {
+			t.Fatalf("banners[%q] 横幅图 %q 非 common/*：CN3.5 客户端可能不出图", id, b.AssetName)
+		}
+		if b.BigAssetName != "" && !strings.HasPrefix(b.BigAssetName, "common/") {
+			t.Fatalf("banners[%q] 大图 %q 非 common/*：CN3.5 客户端可能不出图", id, b.BigAssetName)
+		}
+		if b.IsShow != nil && !*b.IsShow {
+			t.Fatalf("banners[%q] isShow:false：轮播会过滤而活动列表不过滤，不能进白名单", id)
 		}
 	}
+}
 
-	// 2) 首项必须有 big_assetname + asset_name —— top_activity 只读 activityList[0]。
-	//    真实配置里排在首位且不具备出图条件的键不能当首项，否则 Home 大图空白。
-	//    故服务器取配置键序；若首项缺图，这里如实报出（不静默跳过）。
-	if len(ids) > 0 {
-		first := banners[ids[0]]
-		if first.BigAssetName == "" {
-			t.Errorf("banners[%q] 缺 big_assetname：top_activity 大图无图可取", ids[0])
-		}
-		if first.AssetName == "" {
-			t.Errorf("banners[%q] 缺 asset_name：轮播无图可取", ids[0])
-		}
+// TestResolveActivityPageIDs 断言解析结果就是白名单（配置齐全时）。
+func TestResolveActivityPageIDs(t *testing.T) {
+	_, assetsDir := loadActivityConfFixture(t)
+	ids, missing := resolveActivityPageIDs(assetsDir)
+	if len(missing) != 0 {
+		t.Fatalf("白名单键在 app_conf banners 中缺失：%v", missing)
 	}
-
-	// 3) 所有「实际会出图」的 banner 资源必须走 common/* ——
-	//    项目已证只有 common/* 通道在 CN3.5 客户端可出图
-	//    （background/* 走 InitBackgroundAssetBundle 恒中 blankTexture，
-	//     见 artifacts/tasks/story350-01/run/baseline.md）。
-	//    真实 2017 配置里部分 banner 的 asset_name 留空（由运营期填），
-	//    空值不算违规；非空值必须 common/*。
-	for id, b := range banners {
-		for _, name := range []string{b.AssetName, b.BigAssetName} {
-			if name == "" {
-				continue
-			}
-			if len(name) < 7 || name[:7] != "common/" {
-				t.Fatalf("banners[%s] 资源 %q 非 common/*：CN3.5 客户端可能不出图", id, name)
-			}
+	if len(ids) != len(activityPageWhitelist) {
+		t.Fatalf("解析结果 %v 与白名单 %v 数量不一致", ids, activityPageWhitelist)
+	}
+	for i := range ids {
+		if ids[i] != activityPageWhitelist[i] {
+			t.Fatalf("顺序不一致：%v vs %v", ids, activityPageWhitelist)
 		}
 	}
 }
@@ -89,7 +122,7 @@ func TestActPagesIDsMatchAppConfBanners(t *testing.T) {
 func TestActPagesHandlerShape(t *testing.T) {
 	ids := loadActivityPageIDs(filepath.Join("..", "..", "assets", "cn350"))
 	if len(ids) == 0 {
-		t.Fatal("activityPageIDs 为空：activityList 空会导致大图分支不进入")
+		t.Fatal("activityPageIDs 为空：activityList 空会导致轮播/活动列表整块空白")
 	}
 	for _, id := range ids {
 		if id == "" {

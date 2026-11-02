@@ -82,8 +82,15 @@ func TestGuildCreateJoinView(t *testing.T) {
 		t.Fatalf("u2 role: %d", v2.MyRole)
 	}
 	// 重复入会拒绝
-	if _, err := s.JoinGuild(u2, g.ID, ""); !errors.Is(err, cn35game.ErrGuildJoined) {
-		t.Fatalf("重复入会应 ErrGuildJoined: %v", err)
+	// GUILDLIFE350-03：无键重复入会＝同参重试 → 幂等成功（不再报错），
+	// 但仍不得产生第二条成员行。历史上这里断言 ErrGuildJoined。
+	if auto, err := s.JoinGuild(u2, g.ID, ""); err != nil || !auto {
+		t.Fatalf("重复入会应幂等成功: err=%v auto=%v", err, auto)
+	}
+	var memberRows int
+	if err := s.DB().QueryRow(`SELECT count(*) FROM cn35_guild_members WHERE user_id=?`, u2).
+		Scan(&memberRows); err != nil || memberRows != 1 {
+		t.Fatalf("重复入会产生 %d 条成员行: %v", memberRows, err)
 	}
 }
 
@@ -121,9 +128,10 @@ func TestGuildApplyApproveFlow(t *testing.T) {
 	if v2.Guild == nil || v2.Guild.ID != g.ID {
 		t.Fatal("批准后应已在会")
 	}
-	// 重放同一决定拒绝
-	if err := s.DecideSubscription(m, subID, true, ""); !errors.Is(err, cn35game.ErrGuildSubDecided) {
-		t.Fatalf("重放审批应 ErrGuildSubDecided: %v", err)
+	// 重放同一决定：GUILDLIFE350-03 起为幂等成功（申请已是 approved），
+	// 但不得重复入会或改他人归属。
+	if err := s.DecideSubscription(m, subID, true, ""); err != nil {
+		t.Fatalf("重放审批应幂等成功: %v", err)
 	}
 }
 
@@ -248,7 +256,14 @@ func TestGuildDefenseAndInvest(t *testing.T) {
 		t.Fatalf("Invest: %v", err)
 	}
 	eq := view.Equipments["hp"]
-	if eq == nil || eq.Point != 250 || eq.Level != 2 {
+	// GC-04：等级不再是「100 点/级」占位规则，而由重建阈值曲线反解。
+	// 250 point 在曲线上仍是 1 级（T(2)=17,700；锚点 T(71)=12,700,000 等见
+	// cn35game/guild_storage_wire.go）。断言由曲线推导，不写魔法数。
+	wantLevel := cn35game.GuildEquipLevel(250)
+	if wantLevel != 1 {
+		t.Fatalf("曲线自检: 250 point 应为 1 级，got %d", wantLevel)
+	}
+	if eq == nil || eq.Point != 250 || eq.Level != wantLevel || eq.UntilPoint != cn35game.GuildEquipThreshold(2) {
 		t.Fatalf("equip: %+v", eq)
 	}
 	var bal int64
@@ -288,8 +303,9 @@ func TestGWSessionHelpPrayAttackSettle(t *testing.T) {
 	}
 	// 应援
 	creditBalance(t, s, u1, "guild_asset", 0) // no-op 保持余额行
+	// 应援成本按原服录包口径 help_bp=50 / help_gp=1000（旧 25 为重建占位）。
 	gp, cost, err := s.GWHelpPray(u1, "help", "help-one", now)
-	if err != nil || gp != 1000 || cost != 25 {
+	if err != nil || gp != 1000 || cost != 50 {
 		t.Fatalf("help: gp=%d cost=%d err=%v", gp, cost, err)
 	}
 	// 重放不重复入账

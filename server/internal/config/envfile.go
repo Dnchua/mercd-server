@@ -1,4 +1,4 @@
-// envfile.go 解析本地环境文件，不执行 shell 内容。
+// envfile.go mercd35 的 env 环境文件加载（AUTHKEY 等密钥类配置落盘入口）。
 //
 // 格式为常见 .env 子集：KEY=VALUE 每行一条，# 开头为注释，容忍
 // `export ` 前缀与成对单/双引号；不做变量展开与转义处理。同名键
@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// DefaultEnvFiles 未显式指定 -env-file / MERCD_ENV_FILE 时按序探测的
+// DefaultEnvFiles 未显式指定 -env-file / MERC35_ENV_FILE 时按序探测的
 // 候选文件（相对当前工作目录）；全部不存在视为未配置，不算错误。
 var DefaultEnvFiles = []string{"mercd35.env", ".env"}
 

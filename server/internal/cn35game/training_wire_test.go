@@ -74,8 +74,10 @@ func statmodelPanel(id, level, dup int) (statmodel.UnitPanel, error) {
 	if id != 152 {
 		return statmodel.UnitPanel{}, nil
 	}
+	// AtMin 用生产同源口径：buildUnitDoc 先过 memorial_masterdata.json
+	// unit_text.152.atk_override=3900（data-align 2026-10-24），不是 catalog 3600。
 	return statmodel.ComputeUnitPanel(statmodel.UnitInput{
-		Type: 3, Rare: 5, HpMin: 3680, AtMin: 3600,
+		Type: 3, Rare: 5, HpMin: 3680, AtMin: 3900,
 		Level: level, DuplicatedCount: dup,
 	})
 }

@@ -2,7 +2,7 @@
 //
 // 设计要点：
 //   - SQLite 使用锁定版本的纯 Go 驱动，CGO_ENABLED=0 仍可交叉编译单二进制。
-//     离线构建须先准备 module cache 或 vendor，见 ../docs/07-数据库与事务教程.md。
+//     离线构建须先准备 module cache 或 vendor，见 docs/后端数据库与Go工作流.md。
 //   - 协议实现保持可独立验证；客户端未确认的业务路由回 501 并记录脱敏请求，
 //     不把猜测响应冒充成已验证协议。
 module github.com/Dnchua/mercd-server/server

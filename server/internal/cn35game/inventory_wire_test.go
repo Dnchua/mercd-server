@@ -166,7 +166,7 @@ func TestInventoryListChain(t *testing.T) {
 	if u152["attack_ms"].(float64) != 2400 || u152["reach"].(float64) != 30 {
 		t.Fatalf("attack_ms/reach: %v", u152)
 	}
-	if u152["hp"].(float64) != 3680 || u152["at"].(float64) != 3600 {
+	if u152["hp"].(float64) != 3680 || u152["at"].(float64) != 3900 {
 		t.Fatalf("hp/at: %v", u152)
 	}
 	// 成长区间与满觉端点（statmodel；152 rare5/type3 → base_max_level 70）。
@@ -176,11 +176,11 @@ func TestInventoryListChain(t *testing.T) {
 	if u152["hp_min"].(float64) != 3680 || u152["hp_max"].(float64) != 7728 {
 		t.Fatalf("hp_min/hp_max: %v", u152)
 	}
-	if u152["at_min"].(float64) != 3600 || u152["at_max"].(float64) != 7560 {
+	if u152["at_min"].(float64) != 3900 || u152["at_max"].(float64) != 8190 {
 		t.Fatalf("at_min/at_max: %v", u152)
 	}
 	if u152["max_duplicated_count"].(float64) != 15 ||
-		u152["hp_15_max"].(float64) != 12078 || u152["at_15_max"].(float64) != 11835 {
+		u152["hp_15_max"].(float64) != 12078 || u152["at_15_max"].(float64) != 12840 {
 		t.Fatalf("满觉端点字段: %v", u152)
 	}
 	if u152["attr_id"].(float64) != 1 || u152["attr_name"] != "炎" {
@@ -189,7 +189,7 @@ func TestInventoryListChain(t *testing.T) {
 	// country_id 为 NUMBER（客户端按 i() 统计同国加成，STRING 恒 0）：
 	// >0 且 country 枚举行存在 {id:同值,name:沙漠之国}（见下枚举旁路断言）。
 	cid, cidOK := u152["country_id"].(float64)
-	if !cidOK || cid <= 0 || u152["sex_id"] != "2" {
+	if !cidOK || cid <= 0 || u152["sex_id"].(float64) != 1 {
 		t.Fatalf("country/sex 枚举键: %v", u152)
 	}
 	// SP/召唤经济字段【重建策略】：★5 → cost=bonus_sp=100*5=500。
@@ -207,11 +207,9 @@ func TestInventoryListChain(t *testing.T) {
 	if u152["max_level"].(float64) != 70 {
 		t.Fatalf("dup=0 max_level=%v want 70", u152["max_level"])
 	}
-	// 05B 取证前不下发潜能键（不发 0 伪造，C0.2）。
-	for _, k := range []string{"upgrade_level", "max_upgrade_level"} {
-		if _, has := u152[k]; has {
-			t.Fatalf("潜能键 %s 在 05B 取证前不得下发: %v", k, u152[k])
-		}
+	// 潜能基线字段（对齐真实国服录包契约：★5 max_upgrade_level=145）。
+	if u152["upgrade_level"].(float64) != 1 || u152["max_upgrade_level"].(float64) != 145 {
+		t.Fatalf("潜能字段 upgrade_level/max_upgrade_level=%v/%v want 1/145", u152["upgrade_level"], u152["max_upgrade_level"])
 	}
 
 	// 魔宠行：uuid 实例键 + 模板数值。
@@ -243,7 +241,7 @@ func TestInventoryListChain(t *testing.T) {
 	sex := dataA["sex"].([]any)
 	foundSex := false
 	for _, s := range sex {
-		if d := s.(map[string]any); d["id"] == "2" && d["name"] == "男" {
+		if d := s.(map[string]any); d["id"].(float64) == 1 && d["name"] == "男" {
 			foundSex = true
 		}
 	}
@@ -410,13 +408,13 @@ func TestInventoryMonsterEquip(t *testing.T) {
 }
 
 // TestUnitPanelScalesWithLevel 面板随等级变化（不再是 Lv1 基础值）：
-// 152 Lv70 → 未觉醒端点 hp 7728 / at 7560（Lv1 为 3680/3600）。
+// 152 Lv70 → 未觉醒端点 hp 7728 / at 8190（Lv1 为 3680/3900，含 atk_override）。
 func TestUnitPanelScalesWithLevel(t *testing.T) {
 	ts, st := inventoryServer(t)
 	uid, sk, s0, s1 := establishSession(t, ts.URL, "dev-inv-panel")
 	insertUnit(t, st, uid, 152, 70)
 	u := rowByID(t, gameData(t, ts.URL, "/user_units", uid, sk, s0, s1, "")["user_units"].([]any), 152)
-	if u["hp"].(float64) != 7728 || u["at"].(float64) != 7560 {
+	if u["hp"].(float64) != 7728 || u["at"].(float64) != 8190 {
 		t.Fatalf("Lv70 面板应到端点: hp=%v at=%v", u["hp"], u["at"])
 	}
 	if u["max_level"].(float64) != 70 || u["base_max_level"].(float64) != 70 {
@@ -441,15 +439,15 @@ func TestMonsterBasePanel(t *testing.T) {
 
 // TestUnitPanelBoundaryVectors 用真实 ★5 模板逐条校验 (level,dup) → 面板/max_level。
 func TestUnitPanelBoundaryVectors(t *testing.T) {
-	// catalog 中存在且为 ★5 的模板：152（life 3680 / atk 3600 / type3）。
+	// catalog 中存在且为 ★5 的模板：152（life 3680 / atk_override 3900 / type3）。
 	const uid152 = 152
 	type vec struct {
 		level, dup, hp, at, maxLevel int
 	}
 	vectors := []vec{
-		{1, 0, 3680, 3600, 70},
-		{70, 0, 7728, 7560, 70},
-		{145, 15, 12078, 11835, 145},
+		{1, 0, 3680, 3900, 70},
+		{70, 0, 7728, 8190, 70},
+		{145, 15, 12078, 12840, 145},
 	}
 	for _, v := range vectors {
 		t.Run(fmt.Sprintf("lv%d_dup%d", v.level, v.dup), func(t *testing.T) {
@@ -524,7 +522,7 @@ func TestStatChainConsistency(t *testing.T) {
 	list152 := rowByID(t, gameData(t, ts.URL, "/user_units", uid, sk, s0, s1, "")["user_units"].([]any), 152)
 	wantHp := list152["hp"].(float64)
 	wantAt := list152["at"].(float64)
-	if wantHp != 7728 || wantAt != 7560 {
+	if wantHp != 7728 || wantAt != 8190 {
 		t.Fatalf("/user_units 152 Lv70 面板: hp=%v at=%v", wantHp, wantAt)
 	}
 

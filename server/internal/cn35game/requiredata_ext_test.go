@@ -246,8 +246,24 @@ func TestAdventureAndChooseAttrEmptyStateAreSuccess(t *testing.T) {
 	if !ok {
 		t.Fatalf("data.LoginAdventureData 缺失：%v", data)
 	}
-	if _, has := lad["adventure_info"]; !has {
-		t.Fatalf("LoginAdventureData 缺 adventure_info（客户端 Load 会失败）：%v", lad)
+	// 空态必须让客户端 Load **成功**并落到 "already shown, skipped" 静默跳过分支：
+	// 2026-10-26 实机证实，只有 adventure_info 而缺 `adventure` 子键时客户端走的是
+	// Load 失败分支（每次冷启动打一条 E Unity），故这里逐层断言记录层必填字段。
+	outer, ok := lad["adventure_info"].(map[string]any)
+	if !ok {
+		t.Fatalf("LoginAdventureData 缺 adventure_info：%v", lad)
+	}
+	adv, ok := outer["adventure"].(map[string]any)
+	if !ok {
+		t.Fatalf("adventure_info 缺 adventure 记录层（客户端 Load 会失败）：%v", outer)
+	}
+	for _, k := range []string{"adventure_info", "begin_date_i", "reward_config_id", "user_id"} {
+		if _, has := adv[k]; !has {
+			t.Fatalf("adventure 记录层缺必填字段 %s（客户端 Load 会失败）：%v", k, adv)
+		}
+	}
+	if _, ok := adv["begin_date_i"].(float64); !ok {
+		t.Fatalf("begin_date_i 必须是数值：%v", adv["begin_date_i"])
 	}
 	if _, has := lad["setting"]; !has {
 		t.Fatalf("LoginAdventureData 缺 setting（客户端 Load 会失败）：%v", lad)

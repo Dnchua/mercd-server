@@ -7,7 +7,7 @@
     "pages": 242,
     "partials": 67
   },
-  "version": 201710121008,
+  "version": 201710121012,
   "bloodPercent": 0.3,
   "expires": [
     "albums",
@@ -14002,6 +14002,9 @@
         },
         "Message": {
           "display_footer": true
+        },
+        "Background": {
+          "texture_asset_name": "common/bg-map_1136"
         },
         "HelpText": {
           "text": "1）{0}桑登录，图图即可出发，寻找宝物哟\n2）图图每日前进一步，登陆即可领取当日奖励，错过无法重新领取\n3）图图到达终点后，次日登陆就可以继续去新世界探险啦",
@@ -33814,7 +33817,7 @@
               },
               "OnClick": {
                 "method": "ShowPage",
-                "message": "name=GuildDescription&method=Stack&base=Common/Pages/GuildDescription&overlayModal=show&overlayModalCloseButton=hide",
+                "message": "name=GuildDescription&method=Stack&base=Common/Pages/GuildDescription&overlayModal=show&overlayModalCloseButton=hide&useAdditionalOption=true",
                 "option_key": "description_conf"
               }
             },

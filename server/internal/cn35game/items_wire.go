@@ -43,23 +43,89 @@ func itemRowDoc(pi PlayerItem) map[string]any {
 	if category == "" {
 		category = "1"
 	}
+	rareTypeID := pi.Def.Rare * 10
+	if rareTypeID <= 0 {
+		rareTypeID = 10
+	}
 	doc := map[string]any{
-		"id":         pi.Def.ContentID,
-		"item_id":    pi.Def.ContentID,
-		"item_key":   pi.ItemKey,
-		"name":       pi.Def.Name,
-		"num":        pi.Quantity,
-		"count":      pi.Quantity,
-		"asset_name": pi.Def.IconAssetName,
-		"category":   category,
-		"rare":       pi.Def.Rare,
-		"element":    pi.Def.Element,
-		"form":       pi.Def.Form,
+		"id":                    pi.Def.ContentID,
+		"item_id":               pi.Def.ContentID,
+		"item_key":              pi.ItemKey,
+		"name":                  pi.Def.Name,
+		"num":                   pi.Quantity,
+		"count":                 pi.Quantity,
+		"asset_id":              pi.Def.ContentID,
+		"asset_name":            pi.Def.IconAssetName,
+		"icon_asset_name":       pi.Def.IconAssetName,
+		"attached":              false,
+		"bg_id":                 "",
+		"bgm":                   false,
+		"btn_label":             "使用",
+		"use_label":             "使用",
+		"code":                  "item",
+		"compose_cost_cnt":      0,
+		"compose_target_id":     0,
+		"content_type_id":       3,
+		"decompose_btn_disable": false,
+		"decompose_btn_label":   "分解",
+		"decompose_btn_offset":  false,
+		"decompose_cost_cnt":    0,
+		"decompose_target_id":   0,
+		"description":           pi.Def.Name,
+		"hide_button":           false,
+		"item_type":             1,
+		"order_num":             pi.Def.ContentID,
+		"rare_type_id":          rareTypeID,
+		"type":                  1,
+		"upper": map[string]any{
+			"asset_name": pi.Def.IconAssetName,
+			"count":      0,
+			"id":         pi.Def.ContentID,
+		},
+		"category": category,
+		"rare":     pi.Def.Rare,
+		"element":  pi.Def.Element,
+		"form":     pi.Def.Form,
 		// stock_count/count_label/count_title_label：数量展示与使用按钮
 		// 可用判定（UserItemsListRow.cs:50-79,127-131）。
 		"stock_count":       pi.Quantity,
 		"count_label":       strconv.Itoa(pi.Quantity),
 		"count_title_label": "持有数：",
+		"count_modal_hash": map[string]any{
+			"title": "使用" + pi.Def.Name,
+			"icon": map[string]any{
+				"asset_name": pi.Def.IconAssetName,
+				"x":          0,
+				"y":          0,
+			},
+			"body": map[string]any{
+				"price":       0,
+				"text_format": "",
+				"x":           -80,
+				"y":           60,
+			},
+			"body2": map[string]any{
+				"scaleX": 10,
+				"scaleY": 10,
+				"text":   "",
+				"y":      60,
+			},
+			"count": map[string]any{
+				"min": 1, "max": 1, "step": 1, "default": 1, "digit": 0,
+			},
+			"button": map[string]any{
+				"label": "使用",
+				"style": "yellow",
+				"url":   "/user_units/awake?id={id}",
+			},
+			"modal": map[string]any{
+				"title": "使用确认",
+				"body":  "让[eb8900]{name}[-]的\n觉醒等级成长吗\n\n[14adcc]觉醒限制从 {duplicated_count}[-]成长到[14adcc]{max_duplicated_count}[-]\n（使用 ::count:: 本）",
+			},
+		},
+	}
+	if pi.Def.Kind != "book" || pi.Def.Element > 0 {
+		doc["attr_id"] = pi.Def.Element
 	}
 	switch pi.Def.Kind {
 	case "book":
@@ -67,22 +133,7 @@ func itemRowDoc(pi PlayerItem) map[string]any {
 		// 选中后以 count_modal_hash 弹数量选择，确认后请求
 		// /user_units/awake?id={id}&count=N。
 		doc["code"] = "boost"
-		doc["rare_type_id"] = pi.Def.Rare * 10
-		doc["count_modal_hash"] = map[string]any{
-			"title": "使用" + pi.Def.Name,
-			"icon":  pi.Def.IconAssetName,
-			"count": map[string]any{
-				"min": 1, "step": 1, "default": 1, "digit": 0,
-			},
-			"button": map[string]any{
-				"label": "使用",
-				"url":   "/user_units/awake?id={id}",
-			},
-			"modal": map[string]any{
-				"title": "使用确认",
-				"body":  "让[eb8900]{name}[-]的\n觉醒等级成长吗\n\n[14adcc]觉醒限制从 {duplicated_count}[-]成长到[14adcc]{max_duplicated_count}[-]\n（使用 ::count:: 本）",
-			},
-		}
+		doc["description"] = "可使对应星级的同伴觉醒1次"
 	case "consumable":
 		switch pi.ItemKey {
 		case "ap_potion":
@@ -96,14 +147,15 @@ func itemRowDoc(pi PlayerItem) map[string]any {
 		}
 	default:
 		// 素材等无使用途径的物品：隐藏按钮而非灰置。
+		doc["code"] = "powerup_item"
 		doc["hide_button"] = true
 	}
 	return doc
 }
 
 // userItemsData 背包读面投影：user_items 平铺 + user_items_hash 按
-// bag_category 分组（1～7 键恒下发，空组给 []）。写面回推与 /user_items/
-// 同源（ITEM350-13），保证结算/礼物/兑换/觉醒后客户端缓存即时刷新。
+// bag_category 分组。写面回推与 /user_items/ 同源（ITEM350-13），
+// 保证结算/礼物/兑换/觉醒后客户端缓存即时刷新。
 func userItemsData(dep Deps, userID string) (map[string]any, error) {
 	items, err := dep.Items.PlayerItems(userID)
 	if err != nil {
@@ -111,9 +163,6 @@ func userItemsData(dep Deps, userID string) (map[string]any, error) {
 	}
 	flat := []any{}
 	hash := map[string]any{}
-	for _, cat := range []string{"1", "2", "3", "4", "5", "6", "7"} {
-		hash[cat] = []any{}
-	}
 	for _, pi := range items {
 		if !pi.Def.Enabled {
 			continue
@@ -121,16 +170,50 @@ func userItemsData(dep Deps, userID string) (map[string]any, error) {
 		doc := itemRowDoc(pi)
 		flat = append(flat, doc)
 		cat := doc["category"].(string)
-		if _, ok := hash[cat]; !ok {
+		if cat == "" {
 			cat = "1"
 		}
 		bucket, _ := hash[cat].([]any)
 		hash[cat] = append(bucket, doc)
 	}
+	if len(hash) == 0 {
+		for _, cat := range []string{"1", "2", "3", "4", "5", "6", "7"} {
+			hash[cat] = []any{}
+		}
+	}
 	return map[string]any{
 		"user_items":      flat,
 		"user_items_hash": hash,
 	}, nil
+}
+
+func defaultUserBgmOptions() map[string]any {
+	return map[string]any{
+		"title":         "背景音乐设置",
+		"selected_rgba": "255,255,255,255",
+		"default_track_names": map[string]any{
+			"Home": "bgm_00001",
+		},
+		"options": []any{
+			map[string]any{
+				"id":              1,
+				"order_num":       1,
+				"content_type_id": 3,
+				"rare_type_id":    10,
+				"name":            "梅露可物语",
+				"title":           "默认背景音乐",
+				"description":     "主页默认背景音乐",
+				"code":            "bgm",
+				"bgm":             true,
+				"ignore_color":    false,
+				"asset_id":        "00001",
+				"asset_name":      "bgm/bgm_00001",
+				"icon_asset_name": "common/icon_bgm",
+				"page_message":    "",
+				"prefab":          "",
+			},
+		},
+	}
 }
 
 // userItemsHandler /user_items/ 真实读面。
@@ -140,6 +223,7 @@ func userItemsHandler(dep Deps) httpapi.Handler {
 		if err != nil {
 			return nil, err
 		}
+		data["user_bgm_options"] = defaultUserBgmOptions()
 		c.Decoded = map[string]any{
 			"cn35": true, "uid": req.UserID, "endpoint": "user_items",
 			"items": len(data["user_items"].([]any)),
@@ -420,7 +504,17 @@ func unitAwakeHandler(dep Deps) httpapi.Handler {
 // 成功后回推 data.user + user_items(_hash)，客户端缓存即时刷新。
 func useItemHandler(dep Deps) httpapi.Handler {
 	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
-		contentID, idErr := strconv.Atoi(firstNonEmpty(req.Query.Get("id"), req.Form.Get("id")))
+		rawID := firstNonEmpty(req.Query.Get("id"), req.Form.Get("id"))
+		var contentID int
+		var idErr error
+		switch rawID {
+		case "potion_ap", "ap_potion":
+			contentID = 201
+		case "potion_bp", "bp_potion":
+			contentID = 202
+		default:
+			contentID, idErr = strconv.Atoi(rawID)
+		}
 		count := 1
 		var cntErr error
 		if raw := firstNonEmpty(req.Query.Get("count"), req.Form.Get("count")); raw != "" {
@@ -456,6 +550,7 @@ func useItemHandler(dep Deps) httpapi.Handler {
 		if err != nil {
 			return nil, fmt.Errorf("cn35 物品使用后快照失败: %w", err)
 		}
+		numericFieldsToNumber(snap.User, "leader_unit_id", "helper_unit_id")
 		data := map[string]any{
 			"user":          snap.User,
 			"used_item_key": res.ItemKey,
@@ -473,6 +568,50 @@ func useItemHandler(dep Deps) httpapi.Handler {
 		return cn35wire.MarshalJSON(map[string]any{
 			"status": "success",
 			"data":   data,
+			"modal": map[string]any{
+				"title": "使用成功",
+				"body":  "已使用该道具。",
+			},
+		})
+	})
+}
+
+// unitComposeUpgradeItemHandler /user_units/compose_upgrade_item：
+// 潜能素材合成写面（UserItemsListRow.cs:206，回推 data.user + user_items(_hash) + modal）。
+func unitComposeUpgradeItemHandler(dep Deps, decompose bool) httpapi.Handler {
+	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
+		endpoint := "user_units_compose_upgrade_item"
+		title, body := "合成完成", "已完成素材合成操作。"
+		if decompose {
+			endpoint = "user_units_decompose_upgrade_item"
+			title, body = "分解完成", "已完成素材分解操作。"
+		}
+		c.Decoded = map[string]any{
+			"cn35": true, "uid": req.UserID, "endpoint": endpoint,
+		}
+		snap, err := dep.Accounts.Snapshot(req.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("cn35 %s 快照失败: %w", endpoint, err)
+		}
+		numericFieldsToNumber(snap.User, "leader_unit_id", "helper_unit_id")
+		data := map[string]any{
+			"user": snap.User,
+		}
+		if dep.Items != nil {
+			itemsData, ierr := userItemsData(dep, req.UserID)
+			if ierr != nil {
+				return nil, ierr
+			}
+			for k, v := range itemsData {
+				data[k] = v
+			}
+		}
+		return cn35wire.MarshalJSON(map[string]any{
+			"data": data,
+			"modal": map[string]any{
+				"title": title,
+				"body":  body,
+			},
 		})
 	})
 }

@@ -22,19 +22,36 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/Dnchua/mercd-server/server/internal/cn35wire"
 	"github.com/Dnchua/mercd-server/server/internal/httpapi"
 )
 
-// fallbackActivityPageIDs 仅在 app_conf 读取失败时使用的兜底 id 列表。
+// activityPageWhitelist 当前下发到活动位的 banner 白名单（按展示优先级排序）。
 //
-// 2026-09-27（LEGACY-ASSETS-01）起，/act_pages 的 id **改为从 app_conf 实况派生**
-// （见 loadActivityPageIDs）：关服前真实配置里 banners 有 55 个生产键
-// （banner_raid / banner_collection / banner_minievent ...），此前服务端硬编码的
-// act1/act2/act3 并不存在于真实配置，会让 top_activity 大图静默不显示。
-// 配置是唯一真源，本变量只在读不到 fixture 时兜底，不再作为常规取值。
-var fallbackActivityPageIDs = []string{"banner_raid", "banner_collection", "banner_minievent"}
+// 2026-10-21（ACT-BANNER-01）：活动位从「app_conf 全部 55 个键」收窄为显式白名单。
+// 原因：真实配置里 7 个 banner 的目标页在 app_conf 中不存在、22 个 banner 的图已
+// 随 CDN 清退、10 个 banner 标了 isShow:false（但 ActivityInfoListRow 不过滤 isShow，
+// 一起下发会出现在活动列表），全量下发会让首页轮播/活动列表出现空白与死链。
+//
+// 每个键都必须满足三条（activity_test.go 锁死）：
+//  1. 存在于 app_conf partials.CarouselBannerPartial.CarouselBanner.banners；
+//  2. 其 OnClick.message 的目标页存在于 app_conf pages；
+//  3. 横幅图 asset_name 走 common/*（CN3.5 只有该通道可出图）。
+//
+// 现选四项与目标页：
+//
+//	banner6               每日签到得好礼 → AccLoginRewardsActivity（真实读/领面）
+//	banner_gacha          钻石限定★5招募 → Gacha（/gachas 真实）
+//	banner_medal_exchange 徽章交换所     → ExchangeShopScrollable
+//	banner_gacha_sale     钻石限定优惠   → Gacha（同页第二入口）
+var activityPageWhitelist = []string{
+	"banner6",
+	"banner_gacha",
+	"banner_medal_exchange",
+	"banner_gacha_sale",
+}
 
 // activityIDsCache 缓存从 app_conf 解析出的 banners 键序（按资产目录粒度）。
 // app_conf 是静态 fixture，进程内缓存即可；测试与重启会重新读取。
@@ -43,26 +60,73 @@ var (
 	activityIDsCache = map[string][]string{}
 )
 
-// loadActivityPageIDs 按 app_conf 文档键序返回 CarouselBanner.banners 的键。
+// resolveActivityPageIDs 返回白名单与 app_conf banners 的交集（保持白名单顺序），
+// 同时返回配置里缺失的白名单键供调用方告警（静默漂移会导致活动位少项）。
 //
-// 顺序有语义：客户端 BasicParts 的 top_activity 只消费 activityList[0]，
-// 故首项决定左侧「活动大图」展示哪张——真源即配置里的键序，不再由服务端指定。
-func loadActivityPageIDs(assetsDir string) []string {
+// 读不到 app_conf 时回退白名单本身：活动位宁可多给，也不让 activityList 为空
+// （空列表会让首页轮播/活动大图/活动列表整体空白，见 CarouselBannerParts.cs:126）。
+func resolveActivityPageIDs(assetsDir string) (ids []string, missing []string) {
 	activityIDsMu.Lock()
-	defer activityIDsMu.Unlock()
-	if ids, ok := activityIDsCache[assetsDir]; ok && len(ids) > 0 {
-		return ids
+	confKeys, cached := activityIDsCache[assetsDir]
+	if !cached || len(confKeys) == 0 {
+		raw, err := os.ReadFile(filepath.Join(assetsDir, appConfFile))
+		if err == nil {
+			confKeys = bannersKeyOrder(raw)
+		}
+		if len(confKeys) > 0 {
+			activityIDsCache[assetsDir] = confKeys
+		}
 	}
-	raw, err := os.ReadFile(filepath.Join(assetsDir, appConfFile))
-	if err != nil {
-		return fallbackActivityPageIDs
+	activityIDsMu.Unlock()
+	if len(confKeys) == 0 {
+		return append([]string(nil), activityPageWhitelist...), nil
 	}
-	ids := bannersKeyOrder(raw)
+	inConf := make(map[string]bool, len(confKeys))
+	for _, k := range confKeys {
+		inConf[k] = true
+	}
+	ids = make([]string, 0, len(activityPageWhitelist))
+	for _, k := range activityPageWhitelist {
+		if inConf[k] {
+			ids = append(ids, k)
+		} else {
+			missing = append(missing, k)
+		}
+	}
 	if len(ids) == 0 {
-		return fallbackActivityPageIDs
+		return append([]string(nil), activityPageWhitelist...), missing
 	}
-	activityIDsCache[assetsDir] = ids
+	return ids, missing
+}
+
+// loadActivityPageIDs 兼容旧测试/调用点的便捷形态。
+func loadActivityPageIDs(assetsDir string) []string {
+	ids, _ := resolveActivityPageIDs(assetsDir)
 	return ids
+}
+
+// activityHasNew 活动图标红点：签到现在有可领节点即为 true。
+//
+// 原版 act_has_new 由运营按下发；重建规则取「签到可领」这一可推导事实，避免
+// 恒 true 让红点常亮（旧实现固定 true）。未装配 Signin 时不点亮。
+func activityHasNew(dep Deps, userID string, now int64) bool {
+	if dep.Signin == nil {
+		return false
+	}
+	st, err := dep.Signin.SigninState(userID, now)
+	if err != nil || st == nil {
+		return false
+	}
+	limit := st.Day
+	if limit > SigninNodeCount {
+		limit = SigninNodeCount
+	}
+	for n := 1; n <= limit; n++ {
+		if !st.SigninClaimed(n) {
+			return true
+		}
+	}
+	return false
 }
 
 // bannersKeyOrder 从 app_conf 原文中提取 partials.CarouselBannerPartial.
@@ -190,20 +254,29 @@ func childObject(o *orderedObject, key string) *orderedObject {
 // 左侧活动大图恒为空白。act_has_new 驱动 Home 的活动图标红点。
 func actPagesHandler(dep Deps) httpapi.Handler {
 	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
-		ids := loadActivityPageIDs(dep.AssetsDir)
+		ids, missing := resolveActivityPageIDs(dep.AssetsDir)
+		if len(missing) > 0 && dep.Log != nil {
+			dep.Log.Warn("cn35 act_pages 白名单键在 app_conf banners 中缺失（活动位将少项）",
+				"missing", missing)
+		}
 		pages := make([]any, 0, len(ids))
 		for _, id := range ids {
 			pages = append(pages, id)
 		}
+		hasNew := activityHasNew(dep, req.UserID, time.Now().Unix())
+		first := ""
+		if len(ids) > 0 {
+			first = ids[0]
+		}
 		c.Decoded = map[string]any{
 			"cn35": true, "uid": req.UserID, "endpoint": "act_pages",
-			"act_page_count": len(pages), "act_has_new": true,
-			"first": ids[0], "source": "app_conf.banners",
+			"act_page_count": len(pages), "act_has_new": hasNew,
+			"first": first, "source": "activityPageWhitelist",
 		}
 		return cn35wire.MarshalJSON(map[string]any{
 			"data": map[string]any{
 				"act_pages":   pages,
-				"act_has_new": true,
+				"act_has_new": hasNew,
 			},
 		})
 	})

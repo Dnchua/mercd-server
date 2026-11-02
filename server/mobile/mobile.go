@@ -52,7 +52,7 @@ func Start(stateDir, assetsDir, cardsDir string, port int) error {
 		AssetsDir:  assetsDir,
 		CardsDir:   cardsDir,
 		StateDir:   stateDir,
-		// 移动端默认关取证落盘与周期扫描；仅保留只读运维端点。
+		// 移动端默认关取证落盘与周期扫描、不开管理面（无令牌即 503）。
 		RequestLog:       "",
 		EventLog:         "",
 		RemoteAssetsScan: 0,

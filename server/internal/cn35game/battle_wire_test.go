@@ -405,10 +405,14 @@ func TestBattleChainWire(t *testing.T) {
 	if res["status"] != "success" {
 		t.Fatalf("result: %v", res)
 	}
+	if res["spend_time"].(float64) != 45 {
+		t.Fatalf("spend_time 应回显用时: %v", res["spend_time"])
+	}
 	data := res["data"].(map[string]any)
 	u := data["user"].(map[string]any)
-	// 0024 起升级自动补满 AP（ap=max_ap=level+19）：本次结算 exp 50 → level2 → ap=21。
-	if u["quest_id"].(float64) != 2 || u["ap"].(float64) != 21 {
+	// LOGIN350-02 起升级 AP 叠加增量（不再补满）：战斗中先扣 5 AP → 15，
+	// 本次结算 exp 50 → level2（max_ap 21，增量 +1）→ ap=16。
+	if u["quest_id"].(float64) != 2 || u["ap"].(float64) != 16 {
 		t.Fatalf("结算后 user 状态: %v", u)
 	}
 	q1list := data["quests_1"].([]any)
@@ -453,6 +457,10 @@ func TestBattleChainWire(t *testing.T) {
 		"mode=quest&id=1&difficulty_id=normal&party_id=001", "_method=GET")
 	if doc2["clear_count"].(float64) != 1 {
 		t.Fatalf("再刷时 clear_count 应为 1: %v", doc2["clear_count"])
+	}
+	// execute exp = 会话口径（难度 profile），非 battle.Exp 基值。
+	if doc2["exp"].(float64) != 100 {
+		t.Fatalf("execute exp 应为会话经验值: %v", doc2["exp"])
 	}
 	bid2 := strings.SplitN(doc2["ap_use_url"].(string), "bid=", 2)[1]
 	gameJSON(t, ts.URL, "/quests/use_ap", uid, sk, s0, s1, "bid="+bid2, "_method=GET")
@@ -658,8 +666,8 @@ func TestBattleRestartWire(t *testing.T) {
 		t.Fatalf("重启后结算: %v", res)
 	}
 	u := res["data"].(map[string]any)["user"].(map[string]any)
-	// 0024 起升级补满 AP：重启后结算同样落到 level2 → ap=21。
-	if u["quest_id"].(float64) != 2 || u["ap"].(float64) != 21 {
+	// LOGIN350-02 起升级 AP 叠加增量：重启后结算同样落到 level2 → ap=16。
+	if u["quest_id"].(float64) != 2 || u["ap"].(float64) != 16 {
 		t.Fatalf("重启后结算状态: %v", u)
 	}
 	res2 := gameJSON(t, ts2.URL, "/quests/result", uid, sk, s0, s1, "bid="+bid+"&time=30&mc=0", "_method=GET")

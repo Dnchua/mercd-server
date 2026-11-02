@@ -1,0 +1,71 @@
+{
+ "_source": "artifacts/mlk-capture-201711/decrypted/1/guild_rankings_item_rewards.json",
+ "_source_sha256": "c8059976b3f9bcd13375496bbd7243d1b0b4065f85a2557eade8c327334e9748",
+ "_note": "CN3.5 原服 2017-11 录包静态展示表；键均为已格式化字符串（含千分位），逐字来自原服回包。",
+ "rewards": [
+  {
+   "min_rank": "1位",
+   "max_rank": "100位",
+   "point": "217",
+   "gacha_point": "250,000",
+   "medal": "250",
+   "guild_asset": "250,000"
+  },
+  {
+   "min_rank": "101位",
+   "max_rank": "500位",
+   "point": "23",
+   "gacha_point": "200,000",
+   "medal": "200",
+   "guild_asset": "200,000"
+  },
+  {
+   "min_rank": "501位",
+   "max_rank": "1000位",
+   "point": "5",
+   "gacha_point": "170,000",
+   "medal": "170",
+   "guild_asset": "170,000"
+  },
+  {
+   "min_rank": "1001位",
+   "max_rank": "1500位",
+   "point": "0",
+   "gacha_point": "140,000",
+   "medal": "140",
+   "guild_asset": "140,000"
+  },
+  {
+   "min_rank": "1501位",
+   "max_rank": "2000位",
+   "point": "0",
+   "gacha_point": "110,000",
+   "medal": "110",
+   "guild_asset": "110,000"
+  },
+  {
+   "min_rank": "2001位",
+   "max_rank": "3000位",
+   "point": "0",
+   "gacha_point": "80,000",
+   "medal": "80",
+   "guild_asset": "80,000"
+  },
+  {
+   "min_rank": "3001位",
+   "max_rank": "4000位",
+   "point": "0",
+   "gacha_point": "60,000",
+   "medal": "60",
+   "guild_asset": "60,000"
+  },
+  {
+   "min_rank": "4001位",
+   "max_rank": "5500位",
+   "point": "0",
+   "gacha_point": "40,000",
+   "medal": "40",
+   "guild_asset": "40,000"
+  }
+ ]
+}

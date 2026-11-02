@@ -1,6 +1,7 @@
 // Command mercd35 服务国服 3.5.0 客户端（com.happyelements.miraclecn.uc
 // versionCode 1316）的本地契约。协议常量、assets、state 全部独立；
-// 另挂载只读运维端点（/mercd/health 等）。
+// 另挂载无鉴权只读运维端点（/mercd/health 等）与内嵌管理后台 SPA
+// （/mercd/admin/）。
 //
 // 本入口只做 flag 收集与进程生命周期；启动链本体在 internal/cn35app，
 // 与 mobile（gomobile AAR 入口）共用。

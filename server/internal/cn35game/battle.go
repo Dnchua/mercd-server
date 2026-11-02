@@ -307,30 +307,34 @@ func BattleMonsterDoc(m *cardcatalog.Monster) map[string]any {
 		"rare_type_count": m.Rare,
 		"rare_type_name":  strings.Repeat("╂", m.Rare),
 		"seed_skill_id":   0,
+		"batch":           -1,
+		"cutin_x":         -90,
+		"cutin_y":         -100,
+		"cutin_scale":     1.3,
 	}
-	// 文本：CN 官方（wiki=生产同源日文）优先，纪念版补缺。
-	if m.Remark != "" {
+	// 文本：国服真实录包中文优先，其次 CN catalog，缺则纪念版补缺。
+	mt := memorialMonsterText(m.ID)
+	if n, ok := mt["name"].(string); ok && n != "" {
+		doc["name"] = n
+	}
+	if d, ok := mt["description"].(string); ok && d != "" {
+		doc["description"] = d
+	} else if m.Remark != "" {
 		doc["description"] = m.Remark
-	} else if t := memorialMonsterText(m.ID); t != nil && t["description"] != nil {
-		doc["description"] = t["description"]
 	}
-	if m.Obtain != "" {
+	if o, ok := mt["obtain"].(string); ok && o != "" {
+		doc["appear_stage_names"] = o
+	} else if m.Obtain != "" {
 		doc["appear_stage_names"] = m.Obtain
-	} else if t := memorialMonsterText(m.ID); t != nil && t["obtain"] != nil {
-		doc["appear_stage_names"] = t["obtain"]
 	}
 	// 行为层：monster_defaults 铺底（含 knockback 重建值）→
 	// monster_official（15 怪逐值）/ monster_memorial（902 怪真值）。
-	// official 命中时 speed/attack_ms/attackable_count/cost/reach/
-	// call_interval_ms 已是官方真值，wiki 只发 wiki 形键不再覆盖。
+	// official/memorial 命中时 speed/attack_ms/attackable_count/cost/reach/
+	// call_interval_ms 已是纪念版/官方真值，仅 defaults 层（CN 独占怪）回退 wiki。
 	layer := applyMemorialMonsterBattle(doc, m.ID)
-	official := layer == "official"
 
 	fill := memorialMonsterFill(m.ID)
-	if !official {
-		// doc 形键：wiki 有效值优先；缺/垃圾值（mspd≤0、aspd≤0 或 >10s、
-		// anum<1、sklsp=0——wiki 占位 0 与缺键同义，见怪 524）取
-		// catalog_fill，fill 也没有就保持行为层值。
+	if layer == "defaults" {
 		if m.MSpd != nil && *m.MSpd > 0 {
 			doc["speed"] = *m.MSpd
 		} else if v, ok := fill["speed"]; ok {
@@ -354,8 +358,6 @@ func BattleMonsterDoc(m *cardcatalog.Monster) map[string]any {
 		if m.SklCD != nil && *m.SklCD > 0 {
 			doc["call_interval_ms"] = int(float64(float32(*m.SklCD)) * 1000)
 		}
-		// call_interval_ms 缺值时保留行为层值（memorial 层已下发真值；
-		// defaults 层没有——CN 独占怪缺 sklcd 属已知缺口）。
 	}
 	// wiki 形键（兼容旧消费）：wiki 记录值原样下发（含占位 0），
 	// 缺键时取 catalog_fill。
@@ -369,37 +371,60 @@ func BattleMonsterDoc(m *cardcatalog.Monster) map[string]any {
 		doc["anum"] = *m.ANum
 	}
 	if m.AArea != nil {
-		// reach 已由行为层下发 reachValue（15/15 对拍；wiki aarea 对
-		// 怪物与 doc.reach 大面积不符）——aarea 仅作 wiki 形键保留。
 		doc["aarea"] = *m.AArea
 	}
-	if m.Tenacity != nil && *m.Tenacity > 0 {
+	mentry, mcovered := memorialMonsterEntry(m.ID)
+	if mcovered && mentry["taghness"] != nil {
+		doc["taghness"] = mentry["taghness"]
+		doc["tenacity"] = mentry["taghness"]
+	} else if m.Tenacity != nil && *m.Tenacity > 0 {
+		doc["taghness"] = *m.Tenacity
 		doc["tenacity"] = *m.Tenacity
 	} else if v, ok := fill["taghness"]; ok {
+		doc["taghness"] = v
 		doc["tenacity"] = v
+	} else {
+		doc["taghness"] = 50.0
+	}
+	setRate(doc, "fire_rate", m.Rates.Fire)
+	setRate(doc, "water_rate", m.Rates.Aqua)
+	setRate(doc, "wind_rate", m.Rates.Wind)
+	setRate(doc, "light_rate", m.Rates.Light)
+	setRate(doc, "dark_rate", m.Rates.Dark)
+	for _, rk := range []string{"fire_rate", "water_rate", "wind_rate", "light_rate", "dark_rate"} {
+		if mcovered {
+			if v, ok := mentry[rk].(float64); ok && v > 0 {
+				doc[rk] = v
+			}
+		}
+		if _, has := doc[rk]; !has {
+			doc[rk] = 1.0
+		}
 	}
 	if m.SklCD != nil {
 		doc["sklcd"] = *m.SklCD
 	} else if v, ok := fill["sklcd"]; ok {
 		doc["sklcd"] = v
 	}
-	// hp/at/seed_at：wiki 有效基值优先（全层一致）；wiki 缺键或占位 0
-	// → 纪念版条目基值（含官方怪——official 层不下发 hp/at）；
-	// CN 独占怪无基值来源，缺键属已知缺口。
-	mentry, _ := memorialMonsterEntry(m.ID)
-	if m.Life != nil && *m.Life > 0 {
+	// hp/at/seed_at：纪念版基值优先，缺口回退 wiki。
+	if v, ok := mentry["base_hp"].(float64); ok && v > 0 {
+		doc["hp"], doc["life"] = int(v), int(v)
+	} else if m.Life != nil && *m.Life > 0 {
 		doc["hp"], doc["life"] = *m.Life, *m.Life
 	} else if v, ok := mentry["hp"].(float64); ok && v > 0 {
 		doc["hp"] = v
 	}
-	if m.Atk != nil && *m.Atk > 0 {
+	if v, ok := mentry["base_at"].(float64); ok && v > 0 {
+		doc["at"], doc["atk"] = int(v), int(v)
+	} else if m.Atk != nil && *m.Atk > 0 {
 		doc["at"], doc["atk"], doc["seed_at"] = *m.Atk, *m.Atk, *m.Atk
 	} else if v, ok := mentry["at"].(float64); ok && v > 0 {
 		doc["at"] = v
 	}
-	if _, ok := doc["seed_at"]; !ok {
+	if v, ok := mentry["base_seed_at"].(float64); ok && v > 0 {
+		doc["seed_at"] = int(v)
+	} else if _, ok := doc["seed_at"]; !ok {
 		if a, ok := doc["at"]; ok {
-			// 官方样本 at==seed_at；只发了 at 时同值补上。
 			doc["seed_at"] = a
 		}
 	}

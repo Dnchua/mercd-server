@@ -236,29 +236,62 @@ func collectUUIDs(req *cn35wire.GameRequest) []string {
 	return out
 }
 
+// monsterEvolveSelectInfoHandler /user_monsters/evolve_select_info：
+// 魔宠进化选择页静态说明信息（UserMonsters requireData.user_monsters_evolve_select_info）。
+func monsterEvolveSelectInfoHandler(dep Deps) httpapi.Handler {
+	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
+		c.Decoded = map[string]any{
+			"cn35": true, "uid": req.UserID, "endpoint": "user_monsters_evolve_select_info",
+		}
+		return cn35wire.MarshalJSON(map[string]any{
+			"data": map[string]any{
+				"user_monsters_evolve_select_info": map[string]any{
+					"egg_btn_label":     "进化之卵",
+					"help_body":         "可选择消耗同类魔宠或进化之卵来提升王宠体型上限。",
+					"help_title":        "魔宠进化说明",
+					"monster_btn_label": "同类魔宠",
+					"step1_asset_name":  "common/monster_evolve_step1",
+					"step1_desc":        "选择需要进化的王宠",
+					"step1_title":       "第一步",
+					"step2_asset_name":  "common/monster_evolve_step2",
+					"step2_desc":        "选择进化素材完成进化",
+					"step2_title":       "第二步",
+					"title":             "魔宠进化",
+				},
+			},
+		})
+	})
+}
+
 // monsterUnsupportedHandler 未取证魔宠写面的明确拒绝（替代 501/伪造成功）。
 // 路径→未证原因（客户端行号见 cn35game.go 注册注释）：
 func monsterUnsupportedHandler(dep Deps) httpapi.Handler {
-	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
-		path := c.R.URL.Path
-		title, body := "功能未启用", "该功能尚未在本地服务端实现。"
-		switch {
-		case strings.Contains(path, "sell"):
-			title, body = "魔宠出售未启用", "魔宠出售价格规则未取证，暂不开放出售。"
-		case strings.Contains(path, "powerup"):
-			title, body = "魔宠强化未启用", "魔宠强化规则与消耗素材配置未取证，暂不开放强化。"
-		case strings.Contains(path, "share"):
-			title, body = "魔宠分享未启用", "魔宠分享规则未取证，暂不开放分享。"
-		case strings.Contains(path, "evolve"):
-			title, body = "魔宠进化未启用", "魔宠进化映射与消耗配置未取证，暂不开放进化。"
+	monstersH := userMonstersHandler(dep)
+	return func(c *httpapi.Ctx) error {
+		if c.R.URL.Path == "/user_monsters/" {
+			return monstersH(c)
 		}
-		c.Decoded = map[string]any{
-			"cn35": true, "uid": req.UserID, "endpoint": "user_monsters_unsupported",
-			"path": path, "unsupported": true,
-		}
-		return cn35wire.MarshalJSON(map[string]any{
-			"status": "error",
-			"modal":  map[string]any{"type": "ok", "title": title, "body": body},
-		})
-	})
+		return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
+			path := c.R.URL.Path
+			title, body := "功能未启用", "该功能尚未在本地服务端实现。"
+			switch {
+			case strings.Contains(path, "sell"):
+				title, body = "魔宠出售未启用", "魔宠出售价格规则未取证，暂不开放出售。"
+			case strings.Contains(path, "powerup"):
+				title, body = "魔宠强化未启用", "魔宠强化规则与消耗素材配置未取证，暂不开放强化。"
+			case strings.Contains(path, "share"):
+				title, body = "魔宠分享未启用", "魔宠分享规则未取证，暂不开放分享。"
+			case strings.Contains(path, "evolve"):
+				title, body = "魔宠进化未启用", "魔宠进化映射与消耗配置未取证，暂不开放进化。"
+			}
+			c.Decoded = map[string]any{
+				"cn35": true, "uid": req.UserID, "endpoint": "user_monsters_unsupported",
+				"path": path, "unsupported": true,
+			}
+			return cn35wire.MarshalJSON(map[string]any{
+				"status": "error",
+				"modal":  map[string]any{"type": "ok", "title": title, "body": body},
+			})
+		})(c)
+	}
 }

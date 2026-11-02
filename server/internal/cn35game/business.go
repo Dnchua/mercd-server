@@ -155,6 +155,23 @@ func presetDataHandler(dep Deps) httpapi.Handler {
 			}
 			data["user_decks"] = DecksWire(decks)
 		}
+		// ACT-BANNER-01（2026-10-21）：活动位随登录快照下发，与原版同源。
+		// 客户端只有一个 act_pages 消费点（DataCache.cs:265-267 → common.activityList），
+		// 而真实 app_conf 无任何页面 requireData.act_pages —— 原服即靠 preset_data
+		// 携带该键。这里由服务端白名单注入（resolveActivityPageIDs），避免 fixture
+		// 里写死玩家可见活动、也避免空数组把缓存占住（UI-HOME-FIX 记录过的坑）。
+		// act_has_new 取「签到可领」这一可推导事实，驱动首页活动图标红点。
+		actIDs, actMissing := resolveActivityPageIDs(dep.AssetsDir)
+		if len(actMissing) > 0 && dep.Log != nil {
+			dep.Log.Warn("cn35 preset_data act_pages 白名单键在 app_conf banners 中缺失",
+				"missing", actMissing)
+		}
+		actPages := make([]any, 0, len(actIDs))
+		for _, id := range actIDs {
+			actPages = append(actPages, id)
+		}
+		data["act_pages"] = actPages
+		data["act_has_new"] = activityHasNew(dep, req.UserID, time.Now().Unix())
 		// GACHA350-06/真机验收修正：抽卡读面**不**再随 preset_data 预置。
 		// app_conf Gacha 页声明 requireData.gachas.path=/gachas，而
 		// DataCache.DataLoad 在 cache 已有键时跳过请求——preset_data 预置
@@ -165,7 +182,14 @@ func presetDataHandler(dep Deps) httpapi.Handler {
 		// 已缓存后切页不重复请求，是客户端原生语义，不是缺口。
 		// 服务端时钟字段：UpdateConst 用 time 校 clientServerTimeDifference。
 		if consts, ok := data["consts"].(map[string]any); ok {
+			// 服务端权威时钟：装配了 GuildClock（-guild-clock-offset 验收手段）
+			// 时，下发的 time/stamp 与被偏移的会战判定时钟保持一致，否则客户端
+			// 仍按本机时间选 fields 时窗，会与 battle_condition 打架（实机现象：
+			// 已进可战场次但主页显示「今日高挂免战牌」）。
 			now := time.Now().Unix()
+			if dep.GuildClock != nil {
+				now = dep.GuildClock().Unix()
+			}
 			consts["time"] = now
 			consts["stamp"] = now
 			// GUILD350：会战难度行说明（BattleQuestSelectParts 读
@@ -287,6 +311,14 @@ func bundleHandler(dep Deps) httpapi.Handler {
 		}
 		full := filepath.Join(dep.BundlesDir, filepath.FromSlash(name))
 		fi, err := os.Stat(full)
+		if err != nil || fi.IsDir() {
+			if logical, ok := bundleLogicalName(name); ok {
+				alt := filepath.Join(dep.BundlesDir, filepath.FromSlash(logical+".Android.unity3d"))
+				if afi, aerr := os.Stat(alt); aerr == nil && !afi.IsDir() {
+					full, fi, err = alt, afi, nil
+				}
+			}
+		}
 		if err != nil || fi.IsDir() {
 			return fmt.Errorf("cn35 bundle 缺失: %s（%w）", name, err)
 		}

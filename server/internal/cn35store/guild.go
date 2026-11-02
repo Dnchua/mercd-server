@@ -31,15 +31,24 @@ func newGuildSubID() string { return "gs" + randHex(14) }
 // errOpReplay 幂等键命中已决操作（调用方转「已成功」响应）。
 var errOpReplay = errors.New("cn35store: 公会操作幂等键重放")
 
-// opKeyOr 缺省幂等键：由操作语义生成（写面天然状态机幂等时仅作台账）。
+// opKeyOr 缺省幂等键：由操作语义生成（GUILDLIFE350-03）。
+//
+// 原实现无键时拼 randHex(8)，等于每次都换键——既去不了重放，也不能宣称
+// 「无键重试安全」。现在缺省键是**确定性语义键**（如 create / join:<gid> /
+// dropout:<target> / invest:<type>:<value>:<60s 时间桶>），同参重试命中
+// 同一行；调用方对 errOpReplay 做「状态已满足则成功、未满足则执行」处理。
 func opKeyOr(opKey, fallback string) string {
 	if opKey != "" {
 		return opKey
 	}
-	return fallback + ":" + randHex(8)
+	return fallback
 }
 
-// recordGuildOpTx 幂等键登记：已存在同键 → errOpReplay。
+// recordGuildOpTx 幂等键登记（GUILDLIFE350-03）：
+//   - 同键 + 同 op/同 payload → errOpReplay（调用方转「已成功」响应）；
+//   - 同键 + 异 op 或异 payload → ErrGuildOp（显式键冲突拒绝，不静默成功）。
+//
+// 只有登记到 op/payload 才能断言「同键异参拒绝」，不能在缺参场景宣称重试安全。
 func recordGuildOpTx(tx *sql.Tx, userID, opKey, op, payload string) error {
 	res, err := tx.Exec(`INSERT INTO cn35_guild_ops
 		(user_id,op_key,op,payload_json,created_at) VALUES (?,?,?,?,?)
@@ -49,6 +58,14 @@ func recordGuildOpTx(tx *sql.Tx, userID, opKey, op, payload string) error {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
+		var oldOp, oldPayload string
+		if err := tx.QueryRow(`SELECT op,payload_json FROM cn35_guild_ops
+			WHERE user_id=? AND op_key=?`, userID, opKey).Scan(&oldOp, &oldPayload); err != nil {
+			return err
+		}
+		if oldOp != op || oldPayload != payload {
+			return cn35game.ErrGuildOp
+		}
 		return errOpReplay
 	}
 	return nil
@@ -79,16 +96,27 @@ func guildRowTx(tx *sql.Tx, guildID string) (*cn35game.Guild, error) {
 	for i := 0; i < 7; i++ {
 		g.Shifts[i] = shifts&(1<<i) != 0
 	}
-	var master string
+	// 会长名：真人会长（accounts 投影）优先，其次 NPC 会长身份
+	// （GUILDLIFE350-04：NPC 公会不建 cn35_accounts 行）。
+	var master sql.NullString
 	_ = tx.QueryRow(`SELECT COALESCE(NULLIF(a.user_name,''),NULLIF(a.account_name,''),a.user_id)
 		FROM cn35_guild_members m
 		JOIN cn35_accounts a ON a.user_id=m.user_id
 		WHERE m.guild_id=? AND m.role=3`, guildID).Scan(&master)
-	g.MasterName = master
-	if err := tx.QueryRow(`SELECT count(*) FROM cn35_guild_members WHERE guild_id=?`,
-		guildID).Scan(&g.MemberCount); err != nil {
+	if !master.Valid || master.String == "" {
+		_ = tx.QueryRow(`SELECT i.name FROM cn35_guild_npc_members n
+			JOIN cn35_npc_identities i ON i.npc_id=n.npc_id
+			WHERE n.guild_id=? AND n.role=3`, guildID).Scan(&master)
+	}
+	if master.Valid {
+		g.MasterName = master.String
+	}
+	// 容量：真人成员 + NPC 成员（NPC 公会池的席位真源）。
+	cnt, err := guildMemberCountTx(tx, guildID)
+	if err != nil {
 		return nil, err
 	}
+	g.MemberCount = cnt
 	return &g, nil
 }
 
@@ -99,22 +127,36 @@ func guildViewTx(tx *sql.Tx, guildID, viewerID string, withSubs bool) (*cn35game
 		return nil, err
 	}
 	view := &cn35game.GuildView{Guild: g, Equipments: map[string]*cn35game.GuildEquipment{}}
-	rows, err := tx.Query(`SELECT m.user_id,
-		COALESCE(NULLIF(a.user_name,''),NULLIF(a.account_name,''),a.user_id),
-		m.role,p.level,p.leader_unit_id,m.joined_at
+	// 成员 = 真人成员 ∪ NPC 成员（GUILDLIFE350-04/06：同源投影，客户端
+	// GuildMembers 行与 guild.users_map 同集合；NPC 不冒充真实 user_id）。
+	rows, err := tx.Query(`SELECT user_id,name,role,level,leader_unit_id,joined_at,is_npc FROM (
+		SELECT m.user_id,
+			COALESCE(NULLIF(a.user_name,''),NULLIF(a.account_name,''),m.user_id) AS name,
+			m.role, COALESCE(p.level,0) AS level,
+			COALESCE(p.leader_unit_id,'') AS leader_unit_id,
+			m.joined_at, 0 AS is_npc
 		FROM cn35_guild_members m
-		JOIN cn35_accounts a ON a.user_id=m.user_id
+		LEFT JOIN cn35_accounts a ON a.user_id=m.user_id
 		LEFT JOIN cn35_player_profiles p ON p.user_id=m.user_id
-		WHERE m.guild_id=? ORDER BY m.role DESC, m.joined_at`, guildID)
+		WHERE m.guild_id=?
+		UNION ALL
+		SELECT n.npc_id, i.name, n.role, i.level, i.leader_unit_id, n.joined_at, 1
+		FROM cn35_guild_npc_members n
+		JOIN cn35_npc_identities i ON i.npc_id=n.npc_id
+		WHERE n.guild_id=?
+	) ORDER BY role DESC, joined_at, user_id`, guildID, guildID)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var mem cn35game.GuildMember
-		if err = rows.Scan(&mem.UserID, &mem.Name, &mem.Role, &mem.Level, &mem.LeaderUnitID, &mem.JoinedAt); err != nil {
+		var isNPC int
+		if err = rows.Scan(&mem.UserID, &mem.Name, &mem.Role, &mem.Level,
+			&mem.LeaderUnitID, &mem.JoinedAt, &isNPC); err != nil {
 			rows.Close()
 			return nil, err
 		}
+		mem.IsNPC = isNPC != 0
 		if mem.UserID == viewerID {
 			view.MyRole = mem.Role
 		}
@@ -123,22 +165,14 @@ func guildViewTx(tx *sql.Tx, guildID, viewerID string, withSubs bool) (*cn35game
 	if err = rows.Close(); err != nil {
 		return nil, err
 	}
-	eqRows, err := tx.Query(`SELECT type_id,level,point FROM cn35_guild_equipment
-		WHERE guild_id=?`, guildID)
+	// GC-04：六类设施投影。等级由 point 反解、until/value/value2/end 由重建曲线
+	// 现算，bp_storage 另带公会共享蓄水余额比例（见 guild_storage.go）。不直接
+	// 读 level 列——0039 之前的老库该列是按占位规则写的，会与曲线不一致。
+	equipments, err := guildEquipmentsTx(tx, guildID)
 	if err != nil {
 		return nil, err
 	}
-	for eqRows.Next() {
-		var e cn35game.GuildEquipment
-		if err = eqRows.Scan(&e.TypeID, &e.Level, &e.Point); err != nil {
-			eqRows.Close()
-			return nil, err
-		}
-		view.Equipments[e.TypeID] = &e
-	}
-	if err = eqRows.Close(); err != nil {
-		return nil, err
-	}
+	view.Equipments = equipments
 	if withSubs {
 		subRows, err := tx.Query(`SELECT s.sub_id,s.guild_id,s.user_id,
 			COALESCE(a.user_name,''),COALESCE(p.level,0),s.kind,s.status
@@ -208,44 +242,164 @@ func (s *Store) GuildShow(guildID string) (*cn35game.GuildView, error) {
 	return view, err
 }
 
-// SearchGuilds /guilds/search.json 读面。
-func (s *Store) SearchGuilds(keyword, playTypeID, approvalTypeID string) ([]cn35game.Guild, error) {
-	q := `SELECT guild_id,name,play_type_id,approval_type_id,recruit_text,memo,
-		shifts,battle_setting_text,rating,rank_id,gp FROM cn35_guilds WHERE 1=1`
-	args := []any{}
+// guildSearchLimit 搜索结果行数上限（含 NPC 候选）。
+const guildSearchLimit = 20
+
+// guildSearchRowsTx 搜索读面（GUILDLIFE350-04）：
+//   - 真人公会：保持原筛选语义（名称子串 / 玩法 / 审批 为空或缺省兼容）；
+//   - NPC 候选公会（source='npc' AND pool_role='candidate'）：仅在单机域启用、
+//     且仍有空位、且查询者不是其成员时作为「可加入候选」进入列表；
+//   - 人数与会长名在同一 SQL 投影，列表行、详情、公会主页同源（消除
+//     「搜索不填 MemberCount/MasterName」静态缺口）。
+func guildSearchRowsTx(tx *sql.Tx, viewerID, keyword, playTypeID, approvalTypeID string,
+	solo bool) ([]cn35game.Guild, error) {
+	base := `SELECT g.guild_id,g.name,g.play_type_id,g.approval_type_id,g.recruit_text,
+		g.memo,g.shifts,g.battle_setting_text,g.rating,g.rank_id,g.gp,g.source,
+		(SELECT count(*) FROM cn35_guild_members m WHERE m.guild_id=g.guild_id)
+		+ (SELECT count(*) FROM cn35_guild_npc_members n WHERE n.guild_id=g.guild_id) AS member_count,
+		COALESCE(
+			(SELECT COALESCE(NULLIF(a.user_name,''),NULLIF(a.account_name,''),a.user_id)
+			 FROM cn35_guild_members m2 JOIN cn35_accounts a ON a.user_id=m2.user_id
+			 WHERE m2.guild_id=g.guild_id AND m2.role=3),
+			(SELECT i.name FROM cn35_guild_npc_members n2
+			 JOIN cn35_npc_identities i ON i.npc_id=n2.npc_id
+			 WHERE n2.guild_id=g.guild_id AND n2.role=3), '') AS master_name,
+		(SELECT count(*) FROM cn35_guild_members m WHERE m.guild_id=g.guild_id)
+		+ (SELECT count(*) FROM cn35_guild_npc_members n WHERE n.guild_id=g.guild_id)
+		AS occupancy
+	FROM cn35_guilds g WHERE `
+
+	var rows []cn35game.Guild
+	scan := func(rs *sql.Rows) error {
+		for rs.Next() {
+			var g cn35game.Guild
+			var shifts int
+			var source string
+			var occupancy int
+			if err := rs.Scan(&g.ID, &g.Name, &g.PlayTypeID, &g.ApprovalTypeID,
+				&g.RecruitText, &g.Memo, &shifts, &g.BattleSettingText,
+				&g.Rating, &g.RankID, &g.Point, &source, &g.MemberCount,
+				&g.MasterName, &occupancy); err != nil {
+				return err
+			}
+			for i := 0; i < 7; i++ {
+				g.Shifts[i] = shifts&(1<<i) != 0
+			}
+			g.IsNPC = source == "npc"
+			g.HasVacancy = guildSoloVacancy(occupancy)
+			rows = append(rows, g)
+		}
+		return rs.Err()
+	}
+
+	// 1) NPC 候选公会（可加入入口；仅单机域启用时参与推荐）。
+	if solo {
+		q := base + `g.source='npc' AND g.pool_role='candidate'
+			AND (SELECT count(*) FROM cn35_guild_members m WHERE m.guild_id=g.guild_id)
+			  + (SELECT count(*) FROM cn35_guild_npc_members n WHERE n.guild_id=g.guild_id) < ?
+			AND NOT EXISTS(
+			SELECT 1 FROM cn35_guild_members m WHERE m.guild_id=g.guild_id AND m.user_id=?)`
+		args := []any{cn35game.GuildRules.MaxMembers, viewerID}
+		if keyword != "" {
+			q += ` AND g.name LIKE ?`
+			args = append(args, "%"+keyword+"%")
+		}
+		if playTypeID != "" {
+			q += ` AND (g.play_type_id=? OR g.play_type_id='')`
+			args = append(args, playTypeID)
+		}
+		if approvalTypeID != "" {
+			q += ` AND (g.approval_type_id=? OR g.approval_type_id='')`
+			args = append(args, approvalTypeID)
+		}
+		q += ` ORDER BY g.created_at LIMIT ?`
+		args = append(args, guildSearchLimit)
+		rs, err := tx.Query(q, args...)
+		if err != nil {
+			return nil, err
+		}
+		if err := scan(rs); err != nil {
+			rs.Close()
+			return nil, err
+		}
+		if err := rs.Close(); err != nil {
+			return nil, err
+		}
+	}
+	if len(rows) >= guildSearchLimit {
+		return rows[:guildSearchLimit], nil
+	}
+
+	// 2) 真人公会（含查询者自己的公会；历史语义不变）。
+	q := base + `g.source='player' AND g.guild_id<>?`
+	args := []any{viewerID}
 	if keyword != "" {
-		q += ` AND name LIKE ?`
+		q += ` AND g.name LIKE ?`
 		args = append(args, "%"+keyword+"%")
 	}
 	if playTypeID != "" {
-		q += ` AND (play_type_id=? OR play_type_id='')`
+		q += ` AND (g.play_type_id=? OR g.play_type_id='')`
 		args = append(args, playTypeID)
 	}
 	if approvalTypeID != "" {
-		q += ` AND (approval_type_id=? OR approval_type_id='')`
+		q += ` AND (g.approval_type_id=? OR g.approval_type_id='')`
 		args = append(args, approvalTypeID)
 	}
-	q += ` ORDER BY gp DESC, created_at LIMIT 50`
-	rows, err := s.db.Query(q, args...)
+	q += ` ORDER BY g.gp DESC, g.created_at LIMIT ?`
+	args = append(args, guildSearchLimit)
+	rs, err := tx.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []cn35game.Guild{}
-	for rows.Next() {
-		var g cn35game.Guild
-		var shifts int
-		if err = rows.Scan(&g.ID, &g.Name, &g.PlayTypeID, &g.ApprovalTypeID,
-			&g.RecruitText, &g.Memo, &shifts, &g.BattleSettingText,
-			&g.Rating, &g.RankID, &g.Point); err != nil {
-			return nil, err
-		}
-		for i := 0; i < 7; i++ {
-			g.Shifts[i] = shifts&(1<<i) != 0
-		}
-		out = append(out, g)
+	if err := scan(rs); err != nil {
+		rs.Close()
+		return nil, err
 	}
-	return out, rows.Err()
+	if err := rs.Close(); err != nil {
+		return nil, err
+	}
+	if len(rows) > guildSearchLimit {
+		rows = rows[:guildSearchLimit]
+	}
+	return rows, nil
+}
+
+// SearchGuilds /guilds/search.json 读面（真公会 + 单机 NPC 候选）。
+// 返回读面聚合而非裸行：列表行、详情弹窗、公会主页成员/会长/设施同源
+// （GUILDLIFE350-04：搜索不填人数/会长的静态缺口在此闭合）。
+func (s *Store) SearchGuilds(viewerID, keyword, playTypeID, approvalTypeID string) ([]cn35game.GuildView, error) {
+	var out []cn35game.GuildView
+	err := s.withTx(func(tx *sql.Tx) error {
+		cfg, _, err := soloStateTx(tx)
+		if err != nil {
+			return err
+		}
+		if cfg.Enabled {
+			if err := ensureGuildSoloPoolTx(tx); err != nil {
+				return err
+			}
+		}
+		rows, err := guildSearchRowsTx(tx, viewerID, keyword, playTypeID, approvalTypeID, cfg.Enabled)
+		if err != nil {
+			return err
+		}
+		views := make([]cn35game.GuildView, 0, len(rows))
+		for i := range rows {
+			view, verr := guildViewTx(tx, rows[i].ID, viewerID, false)
+			if verr != nil {
+				return verr
+			}
+			// 搜索行的人数/会长名以 SQL 投影为准（同一事务同一真源）。
+			view.Guild.MemberCount = rows[i].MemberCount
+			view.Guild.MasterName = rows[i].MasterName
+			view.Guild.IsNPC = rows[i].IsNPC
+			view.Guild.HasVacancy = rows[i].HasVacancy
+			views = append(views, *view)
+		}
+		out = views
+		return nil
+	})
+	return out, err
 }
 
 // syncGuildNameTx 公会名快照投影回 cn35_player_profiles（Snapshot.user.guild_name）。
@@ -263,14 +417,29 @@ func (s *Store) CreateGuild(userID, name, playTypeID, approvalTypeID, recruitTex
 	}
 	var g *cn35game.Guild
 	err := s.withTx(func(tx *sql.Tx) error {
+		replay := false
 		if err := recordGuildOpTx(tx, userID, opKeyOr(opKey, "create"), "create_guild", name); err != nil {
+			if !errors.Is(err, errOpReplay) {
+				return err
+			}
+			replay = true
+		}
+		gidNow, _, err := memberRoleTx(tx, userID)
+		if err != nil {
 			return err
 		}
-		if gid, _, err := memberRoleTx(tx, userID); err != nil {
-			return err
-		} else if gid != "" {
-			return cn35game.ErrGuildJoined
+		if gidNow != "" {
+			if !replay {
+				return cn35game.ErrGuildJoined
+			}
+			// 同参重试：返回已存在的公会，不重复建会。
+			row, merr := guildRowTx(tx, gidNow)
+			if merr == nil {
+				g = row
+			}
+			return merr
 		}
+		// 无键重放但当前未入会（例如公会随后解散）：按新请求继续建会。
 		gid := newGuildID()
 		now := nowUTC()
 		if _, err := tx.Exec(`INSERT INTO cn35_guilds
@@ -296,12 +465,39 @@ func (s *Store) CreateGuild(userID, name, playTypeID, approvalTypeID, recruitTex
 	return g, err
 }
 
+// cancelOtherPendingAppliesTx 入会成功后清理本人其它公会的 pending 申请
+// （GUILDLIFE350-03：先申请 A 再加入 B 时旧 pending 必须失效，防止审批
+// 把已入会的玩家挪出 B）。
+func cancelOtherPendingAppliesTx(tx *sql.Tx, userID, keepGuildID string) error {
+	_, err := tx.Exec(`UPDATE cn35_guild_subscriptions
+		SET status='cancelled',decided_at=?
+		WHERE user_id=? AND status='pending' AND kind='apply' AND guild_id<>?`,
+		nowUTC(), userID, keepGuildID)
+	return err
+}
+
 // JoinGuild 入会（auto_approval 直进；否则挂 apply 申请）。
+//
+// 单机 NPC 候选公会（source='npc' AND pool_role='candidate'）恒为免审直进——
+// 这是「点击直接加入」的服务端规则（重建规则，非原服事实）；对手公会满员，
+// 走普通容量拒绝。
 func (s *Store) JoinGuild(userID, guildID, opKey string) (bool, error) {
 	auto := false
 	err := s.withTx(func(tx *sql.Tx) error {
 		if err := recordGuildOpTx(tx, userID, opKeyOr(opKey, "join:"+guildID), "join_guild", guildID); err != nil {
-			return err
+			if !errors.Is(err, errOpReplay) {
+				return err
+			}
+			// 无键/同参重试：当前已是该公会成员 → 幂等成功；
+			// 否则（例如退会后再次加入）按新请求继续执行下面的入会校验。
+			gid, _, merr := memberRoleTx(tx, userID)
+			if merr != nil {
+				return merr
+			}
+			if gid == guildID {
+				auto = true
+				return nil
+			}
 		}
 		g, err := guildRowTx(tx, guildID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -315,8 +511,14 @@ func (s *Store) JoinGuild(userID, guildID, opKey string) (bool, error) {
 		} else if gid != "" {
 			return cn35game.ErrGuildJoined
 		}
+		var source, poolRole string
+		if err := tx.QueryRow(`SELECT source,pool_role FROM cn35_guilds WHERE guild_id=?`,
+			guildID).Scan(&source, &poolRole); err != nil {
+			return err
+		}
+		soloCandidate := source == "npc" && poolRole == "candidate"
 		// auto_approval = approval_type_id 空或 "1"（暂定契约，见取证 §7）。
-		if g.ApprovalTypeID == "" || g.ApprovalTypeID == "1" {
+		if soloCandidate || g.ApprovalTypeID == "" || g.ApprovalTypeID == "1" {
 			if g.MemberCount >= cn35game.GuildRules.MaxMembers {
 				return cn35game.ErrGuildFull
 			}
@@ -326,6 +528,9 @@ func (s *Store) JoinGuild(userID, guildID, opKey string) (bool, error) {
 				return err
 			}
 			if err := syncGuildNameTx(tx, userID, g.Name); err != nil {
+				return err
+			}
+			if err := cancelOtherPendingAppliesTx(tx, userID, guildID); err != nil {
 				return err
 			}
 			auto = true
@@ -353,6 +558,9 @@ func (s *Store) DecideSubscription(actorID, subID string, approve bool, opKey st
 	return s.withTx(func(tx *sql.Tx) error {
 		if err := recordGuildOpTx(tx, actorID, opKeyOr(opKey, "decide:"+subID),
 			map[bool]string{true: "approve_sub", false: "reject_sub"}[approve], subID); err != nil {
+			if errors.Is(err, errOpReplay) {
+				return nil // 同参重试：终态已定，按成功回包
+			}
 			return err
 		}
 		var guildID, subUser, kind string
@@ -402,9 +610,9 @@ func (s *Store) DecideSubscription(actorID, subID string, approve bool, opKey st
 		} else if gid != "" {
 			return cn35game.ErrGuildJoined
 		}
-		var cnt int
-		if err := tx.QueryRow(`SELECT count(*) FROM cn35_guild_members WHERE guild_id=?`,
-			guildID).Scan(&cnt); err != nil {
+		// 容量：真人成员 + NPC 成员（NPC 公会池席位）。
+		cnt, err := guildMemberCountTx(tx, guildID)
+		if err != nil {
 			return err
 		}
 		if cnt >= cn35game.GuildRules.MaxMembers {
@@ -419,7 +627,10 @@ func (s *Store) DecideSubscription(actorID, subID string, approve bool, opKey st
 			guildID, subUser, nowUTC()); err != nil {
 			return err
 		}
-		return syncGuildNameTx(tx, subUser, g.Name)
+		if err := syncGuildNameTx(tx, subUser, g.Name); err != nil {
+			return err
+		}
+		return cancelOtherPendingAppliesTx(tx, subUser, guildID)
 	})
 }
 
@@ -427,6 +638,9 @@ func (s *Store) DecideSubscription(actorID, subID string, approve bool, opKey st
 func (s *Store) RejectAllSubscriptions(actorID, opKey string) error {
 	return s.withTx(func(tx *sql.Tx) error {
 		if err := recordGuildOpTx(tx, actorID, opKeyOr(opKey, "reject_all"), "reject_all", ""); err != nil {
+			if errors.Is(err, errOpReplay) {
+				return nil
+			}
 			return err
 		}
 		gid, role, err := memberRoleTx(tx, actorID)
@@ -445,9 +659,15 @@ func (s *Store) RejectAllSubscriptions(actorID, opKey string) error {
 // Dropout 退会/踢人（target==actor 自退；否则要求副长以上且目标职位低于操作者）。
 func (s *Store) Dropout(actorID, targetUserID, opKey string) error {
 	return s.withTx(func(tx *sql.Tx) error {
+		replay := false
 		if err := recordGuildOpTx(tx, actorID, opKeyOr(opKey, "dropout:"+targetUserID), "dropout", targetUserID); err != nil {
-			return err
+			if !errors.Is(err, errOpReplay) {
+				return err
+			}
+			// 目标已不在会 → 幂等成功；仍在会（例如重试前事务未生效）→ 继续执行。
+			replay = true
 		}
+		_ = replay
 		gid, actorRole, err := memberRoleTx(tx, actorID)
 		if err != nil {
 			return err
@@ -506,8 +726,13 @@ func (s *Store) Dropout(actorID, targetUserID, opKey string) error {
 // ChangeRole 职位变更：role=3 禅让会长；2 任命副长；1 解除副长。
 func (s *Store) ChangeRole(actorID, targetUserID string, role int, opKey string) error {
 	return s.withTx(func(tx *sql.Tx) error {
-		if err := recordGuildOpTx(tx, actorID, opKeyOr(opKey, "role:"+targetUserID), "change_role",
-			fmt.Sprintf("%s:%d", targetUserID, role)); err != nil {
+		rolePayload := fmt.Sprintf("%s:%d", targetUserID, role)
+		if err := recordGuildOpTx(tx, actorID,
+			opKeyOr(opKey, "role:"+targetUserID+":"+strconv.Itoa(role)), "change_role",
+			rolePayload); err != nil {
+			if errors.Is(err, errOpReplay) {
+				return nil
+			}
 			return err
 		}
 		gid, actorRole, err := memberRoleTx(tx, actorID)
@@ -560,7 +785,12 @@ func (s *Store) ChangeRole(actorID, targetUserID string, role int, opKey string)
 // UpdateGuild /guilds/update（副长以上）。
 func (s *Store) UpdateGuild(actorID string, in cn35game.GuildUpdateInput, opKey string) error {
 	return s.withTx(func(tx *sql.Tx) error {
-		if err := recordGuildOpTx(tx, actorID, opKeyOr(opKey, "update:"+nowUTC()), "update_guild", ""); err != nil {
+		payload, _ := json.Marshal(in)
+		if err := recordGuildOpTx(tx, actorID, opKeyOr(opKey, "update:"+nowUTC()),
+			"update_guild", string(payload)); err != nil {
+			if errors.Is(err, errOpReplay) {
+				return nil
+			}
 			return err
 		}
 		gid, role, err := memberRoleTx(tx, actorID)
@@ -601,7 +831,17 @@ func (s *Store) UpdateGuild(actorID string, in cn35game.GuildUpdateInput, opKey 
 // SetShifts /guilds/set_shifts（副长以上）。
 func (s *Store) SetShifts(actorID string, shifts [7]bool, opKey string) error {
 	return s.withTx(func(tx *sql.Tx) error {
-		if err := recordGuildOpTx(tx, actorID, opKeyOr(opKey, "shifts:"+nowUTC()), "set_shifts", ""); err != nil {
+		maskPayload := ""
+		for i, on := range shifts {
+			if on {
+				maskPayload += strconv.Itoa(i)
+			}
+		}
+		if err := recordGuildOpTx(tx, actorID, opKeyOr(opKey, "shifts:"+nowUTC()),
+			"set_shifts", maskPayload); err != nil {
+			if errors.Is(err, errOpReplay) {
+				return nil
+			}
 			return err
 		}
 		gid, role, err := memberRoleTx(tx, actorID)
@@ -623,15 +863,42 @@ func (s *Store) SetShifts(actorID string, shifts [7]bool, opKey string) error {
 	})
 }
 
-// Invest /guilds/invest：个人资材 → 公会设施 point/level。
+// Invest /guilds/invest：个人资材 → 公会设施 point/level（GC-04 六类设施成长）。
+//
+// 数值口径：等级由 cn35game.GuildEquipLevel(point) 按重建阈值曲线反解，
+// 满级由 GuildEquipThreshold(GuildEquipMaxLevel) 判定；不再使用「每级固定
+// 点数」的占位常量（原服 70–88 级 point 介于 1,150 万–7,050 万，占位规则
+// 差 5 个数量级）。阈值曲线与锚点见 guild_storage_wire.go 头注释。
 func (s *Store) Invest(userID, typeID string, value int64, opKey string) (*cn35game.GuildView, error) {
-	if typeID == "" || value <= 0 {
+	// temporary 为全 null 占位、不参与投资（原服样本 end=false 且无 point 增长）；
+	// 未知类型同样拒绝——两者都是请求参数非法，不是满级也不是资材不足。
+	if value <= 0 || !cn35game.GuildEquipIsInvestable(typeID) {
 		return nil, cn35game.ErrGuildInvest
 	}
 	var view *cn35game.GuildView
 	err := s.withTx(func(tx *sql.Tx) error {
-		if err := recordGuildOpTx(tx, userID, opKeyOr(opKey, "invest:"+typeID+":"+strconv.FormatInt(value, 10)+":"+nowUTC()),
-			"invest", typeID); err != nil {
+		// 无客户端 op_key：用「同类型同额度 60 秒时间桶」做重试去重
+		// （重建策略，非原服事实）。同桶同参重放不重复扣资材；跨桶为
+		// 玩家新的合法投资。显式键则按 op/payload 严格判重。
+		bucket := s.clockNowUTC().Unix() / 60
+		fallbackKey := fmt.Sprintf("invest:%s:%d:%d", typeID, value, bucket)
+		effectiveKey := opKeyOr(opKey, fallbackKey)
+		if err := recordGuildOpTx(tx, userID, effectiveKey,
+			"invest", fmt.Sprintf("%s:%d", typeID, value)); err != nil {
+			if errors.Is(err, errOpReplay) {
+				gid, _, merr := memberRoleTx(tx, userID)
+				if merr != nil {
+					return merr
+				}
+				if gid == "" {
+					return cn35game.ErrGuildNoMember
+				}
+				v, verr := guildViewTx(tx, gid, userID, false)
+				if verr == nil {
+					view = v
+				}
+				return verr
+			}
 			return err
 		}
 		gid, _, err := memberRoleTx(tx, userID)
@@ -648,7 +915,8 @@ func (s *Store) Invest(userID, typeID string, value int64, opKey string) (*cn35g
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		maxPoint := int64(cn35game.GuildRules.EquipMaxLevel) * cn35game.GuildRules.EquipPointPerLevel
+		levelBefore := cn35game.GuildEquipLevel(curPoint)
+		maxPoint := cn35game.GuildEquipThreshold(cn35game.GuildEquipMaxLevel)
 		remaining := maxPoint - curPoint
 		if remaining <= 0 {
 			return cn35game.ErrGuildEquipMax
@@ -667,7 +935,7 @@ func (s *Store) Invest(userID, typeID string, value int64, opKey string) (*cn35g
 		if err != nil {
 			return err
 		}
-		if n, _ := res.RowsAffected(); n == 0 {
+		if n, _ := res.RowsAffected(); n != 1 {
 			return cn35game.ErrGuildAsset
 		}
 		points := value * cn35game.GuildRules.InvestCostPerPoint
@@ -683,17 +951,18 @@ func (s *Store) Invest(userID, typeID string, value int64, opKey string) (*cn35g
 			WHERE guild_id=? AND type_id=?`, gid, typeID).Scan(&point); err != nil {
 			return err
 		}
-		level := int(point / cn35game.GuildRules.EquipPointPerLevel)
-		if level > cn35game.GuildRules.EquipMaxLevel {
-			level = cn35game.GuildRules.EquipMaxLevel
-		}
+		level := cn35game.GuildEquipLevel(point)
 		if _, err := tx.Exec(`UPDATE cn35_guild_equipment SET level=? WHERE guild_id=? AND type_id=?`,
 			level, gid, typeID); err != nil {
 			return err
 		}
+		// 投资台账：before/after 快照与幂等键同事务落盘（0039 扩列）。
 		if _, err := tx.Exec(`INSERT INTO cn35_guild_invest_log
-			(guild_id,user_id,type_id,amount,created_at) VALUES (?,?,?,?,?)`,
-			gid, userID, typeID, value, nowUTC()); err != nil {
+			(guild_id,user_id,type_id,amount,point_before,point_after,
+			 level_before,level_after,op_key,created_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			gid, userID, typeID, value, curPoint, point,
+			levelBefore, level, effectiveKey, nowUTC()); err != nil {
 			return err
 		}
 		v, err := guildViewTx(tx, gid, userID, false)
@@ -726,26 +995,18 @@ func (s *Store) DefenseOf(userID string) ([]cn35game.GWDefenseSlot, error) {
 	return out, rows.Err()
 }
 
-// DefenseSnapshot 目标公会全在籍成员防卫快照（出战冻结用）。
+// DefenseSnapshot 目标公会全在籍成员防卫快照（真人 + NPC 合并；出战冻结用）。
 func (s *Store) DefenseSnapshot(guildID string) ([]cn35game.GWDefenseMonster, error) {
-	rows, err := s.db.Query(`SELECT d.user_id,d.slot,d.monster_uuid,m.monster_id,m.level
-		FROM cn35_guild_defense d JOIN cn35_player_monsters m
-		ON m.user_id=d.user_id AND m.uuid=d.monster_uuid
-		JOIN cn35_guild_members mem ON mem.user_id=d.user_id
-		WHERE mem.guild_id=? ORDER BY d.user_id,d.slot`, guildID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []cn35game.GWDefenseMonster{}
-	for rows.Next() {
-		var d cn35game.GWDefenseMonster
-		if err = rows.Scan(&d.OwnerUserID, &d.Slot, &d.MonsterUUID, &d.MonsterID, &d.Level); err != nil {
-			return nil, err
+	var out []cn35game.GWDefenseMonster
+	err := s.withTx(func(tx *sql.Tx) error {
+		v, err := defenseSnapshotTx(tx, guildID)
+		if err != nil {
+			return err
 		}
-		out = append(out, d)
-	}
-	return out, rows.Err()
+		out = v
+		return nil
+	})
+	return out, err
 }
 
 // SetDefense /guilds/set_deck?party_index=&uuid=。
@@ -754,9 +1015,24 @@ func (s *Store) SetDefense(userID string, slot int, monsterUUID, opKey string) e
 		return cn35game.ErrGuildDeckSlot
 	}
 	return s.withTx(func(tx *sql.Tx) error {
+		replay := false
 		if err := recordGuildOpTx(tx, userID, opKeyOr(opKey, fmt.Sprintf("def:%d:%s", slot, monsterUUID)),
 			"set_defense", monsterUUID); err != nil {
-			return err
+			if !errors.Is(err, errOpReplay) {
+				return err
+			}
+			// 同参重放：目标槽位已是该魔宠 → 幂等成功；否则（期间被移除）
+			// 继续执行下面的写入，保证「重试得到与首次相同的结果」。
+			var cur string
+			e := tx.QueryRow(`SELECT monster_uuid FROM cn35_guild_defense
+				WHERE user_id=? AND slot=?`, userID, slot).Scan(&cur)
+			if e == nil && cur == monsterUUID {
+				return nil
+			}
+			if e != nil && !errors.Is(e, sql.ErrNoRows) {
+				return e
+			}
+			replay = true
 		}
 		if gid, _, err := memberRoleTx(tx, userID); err != nil {
 			return err
@@ -782,6 +1058,7 @@ func (s *Store) SetDefense(userID string, slot int, monsterUUID, opKey string) e
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
+		_ = replay
 		// batch 为客户端同批限制标记（无生产字段证据）：下发固定 0，
 		// 占位可调——数值 batching 语义由后续取证补齐。
 		_, err = tx.Exec(`INSERT INTO cn35_guild_defense
@@ -797,7 +1074,19 @@ func (s *Store) SetDefense(userID string, slot int, monsterUUID, opKey string) e
 func (s *Store) RemoveDefense(userID, monsterUUID, opKey string) error {
 	return s.withTx(func(tx *sql.Tx) error {
 		if err := recordGuildOpTx(tx, userID, opKeyOr(opKey, "undef:"+monsterUUID), "remove_defense", monsterUUID); err != nil {
-			return err
+			if !errors.Is(err, errOpReplay) {
+				return err
+			}
+			// 同参重放：已不在卡组 → 幂等成功；仍在卡组则继续删除。
+			var slot int
+			e := tx.QueryRow(`SELECT slot FROM cn35_guild_defense
+				WHERE user_id=? AND monster_uuid=?`, userID, monsterUUID).Scan(&slot)
+			if errors.Is(e, sql.ErrNoRows) {
+				return nil
+			}
+			if e != nil {
+				return e
+			}
 		}
 		res, err := tx.Exec(`DELETE FROM cn35_guild_defense WHERE user_id=? AND monster_uuid=?`,
 			userID, monsterUUID)
@@ -913,6 +1202,9 @@ func (s *Store) settleDueSessionsTx(tx *sql.Tx, now time.Time) error {
 				return err
 			}
 			// 胜场公会资材发到成员（占位：会长领取入口外，直接入全员余额）。
+			// GUILDLIFE350-10：发奖走 cn35_gw_reward_claims 台账——同一场次
+			// 同一玩家只发一次（换会/被踢后旧贡献仍可领，但不会重复领）；
+			// NPC 公会没有 member_scores 行，因此永不进入玩家资产链。
 			if p.gid == winner {
 				mr, err := tx.Query(`SELECT user_id FROM cn35_gw_member_scores
 					WHERE session_id=? AND guild_id=?`, d.id, p.gid)
@@ -932,6 +1224,16 @@ func (s *Store) settleDueSessionsTx(tx *sql.Tx, now time.Time) error {
 					return err
 				}
 				for _, u := range winners {
+					claim, err := tx.Exec(`INSERT INTO cn35_gw_reward_claims
+						(session_id,user_id,kind,amount,created_at) VALUES (?,?,'settlement_win',?,?)
+						ON CONFLICT(session_id,user_id,kind) DO NOTHING`,
+						d.id, u, cn35game.GuildRules.RewardGuildAsset, nowUTC())
+					if err != nil {
+						return err
+					}
+					if n, _ := claim.RowsAffected(); n == 0 {
+						continue // 已在其它公会领过本场奖励
+					}
 					if err := creditBalanceTx(tx, u, "guild_asset", int64(cn35game.GuildRules.RewardGuildAsset)); err != nil {
 						return err
 					}
@@ -949,7 +1251,8 @@ func (s *Store) settleDueSessionsTx(tx *sql.Tx, now time.Time) error {
 // ensureGWSessionTx 当前时窗内为公会匹配/建场，返回场次+组。
 // 参会条件：公会 shifts 当日勾选且有成员（shifts 掩码 bit=weekday）。
 func (s *Store) ensureGWSessionTx(tx *sql.Tx, guildID string, local time.Time) (*cn35game.GWSession, string, error) {
-	fi := cn35game.GuildFieldIndex(local)
+	// 只有原服 4 个 actable 半小时窗口建立场次；其余阶段不建场、不结算。
+	fi := cn35game.GuildActableFieldIndex(local)
 	if fi < 0 {
 		return nil, "", nil
 	}
@@ -959,17 +1262,18 @@ func (s *Store) ensureGWSessionTx(tx *sql.Tx, guildID string, local time.Time) (
 		guildID).Scan(&shifts); err != nil {
 		return nil, "", err
 	}
-	if err := tx.QueryRow(`SELECT count(*) FROM cn35_guild_members WHERE guild_id=?`,
-		guildID).Scan(&memberCnt); err != nil {
+	cnt, err := guildMemberCountTx(tx, guildID)
+	if err != nil {
 		return nil, "", err
 	}
+	memberCnt = cnt
 	if memberCnt == 0 || shifts&(1<<int(local.Weekday())) == 0 {
 		return nil, "", nil
 	}
 	dateKey := local.Format("2006-01-02")
 	// 已参会？
 	var sessID, groupKey string
-	err := tx.QueryRow(`SELECT p.session_id,s.group_key FROM cn35_gw_participants p
+	err = tx.QueryRow(`SELECT p.session_id,s.group_key FROM cn35_gw_participants p
 		JOIN cn35_gw_sessions s ON s.session_id=p.session_id
 		WHERE p.guild_id=? AND s.date_key=? AND s.field_index=?`,
 		guildID, dateKey, fi).Scan(&sessID, &groupKey)
@@ -979,14 +1283,19 @@ func (s *Store) ensureGWSessionTx(tx *sql.Tx, guildID string, local time.Time) (
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, "", err
 	}
-	// 匹配：当日该时段尚未入组的参会公会，按建会序取 GroupSize-1 个。
+	// 匹配：当日该时段尚未入组的参会公会，取 GroupSize-1 个。
+	// GUILDLIFE350-05：NPC 公会（对手池 + 候选池）作为独立敌会参战——
+	// 同公会 19 名 NPC 队友不会充当敌方；对手公会用 pool_role='opponent'
+	// 优先入组，保证单机也有稳定敌会与合法防卫。
 	cand, err := tx.Query(`SELECT g.guild_id FROM cn35_guilds g
 		WHERE g.guild_id<>? AND (g.shifts & ?)<>0
-		AND EXISTS(SELECT 1 FROM cn35_guild_members m WHERE m.guild_id=g.guild_id)
+		AND (EXISTS(SELECT 1 FROM cn35_guild_members m WHERE m.guild_id=g.guild_id)
+		     OR EXISTS(SELECT 1 FROM cn35_guild_npc_members n WHERE n.guild_id=g.guild_id))
 		AND NOT EXISTS(
 			SELECT 1 FROM cn35_gw_participants p JOIN cn35_gw_sessions s ON s.session_id=p.session_id
 			WHERE p.guild_id=g.guild_id AND s.date_key=? AND s.field_index=?)
-		ORDER BY g.created_at LIMIT ?`,
+		ORDER BY CASE WHEN g.pool_role='opponent' THEN 0 ELSE 1 END, g.created_at
+		LIMIT ?`,
 		guildID, 1<<int(local.Weekday()), dateKey, fi, cn35game.GuildRules.GroupSize-1)
 	if err != nil {
 		return nil, "", err
@@ -1044,13 +1353,19 @@ func (s *Store) ensureGWSessionTx(tx *sql.Tx, guildID string, local time.Time) (
 // GWState 先结算，再匹配；窗外保留最近场次结果。
 func (s *Store) GWState(userID string, now time.Time) (*cn35game.GWView, error) {
 	local := now.In(guildLoc)
-	view := &cn35game.GWView{FieldIndex: cn35game.GuildFieldIndex(local), SeedPowerup: 1}
+	view := &cn35game.GWView{FieldIndex: cn35game.GuildActableFieldIndex(local), SeedPowerup: 1}
 	err := s.withTx(func(tx *sql.Tx) error {
 		if err := s.settleDueSessionsTx(tx, now); err != nil {
 			return err
 		}
+		if err := settleGuildSeasonsTx(tx, now); err != nil {
+			return err
+		}
 		gid, _, err := memberRoleTx(tx, userID)
 		if err != nil || gid == "" {
+			return err
+		}
+		if err := refillGuildTx(tx, gid, now); err != nil {
 			return err
 		}
 		sess, _, err := s.ensureGWSessionTx(tx, gid, local)
@@ -1116,7 +1431,7 @@ func gwMySessionTx(tx *sql.Tx, userID string, local time.Time) (sessID, guildID 
 	if err != nil || guildID == "" {
 		return "", "", cn35game.ErrGuildNoMember
 	}
-	fi := cn35game.GuildFieldIndex(local)
+	fi := cn35game.GuildActableFieldIndex(local)
 	if fi < 0 {
 		return "", "", cn35game.ErrGWNoSession
 	}
@@ -1143,12 +1458,23 @@ func (s *Store) GWHelpPray(userID, action, opKey string, now time.Time) (int64, 
 		if err != nil {
 			return err
 		}
-		f := cn35game.GuildRules.Fields[cn35game.GuildFieldIndex(local)]
+		fi := cn35game.GuildActableFieldIndex(local)
+		if fi < 0 {
+			return cn35game.ErrGWNoSession
+		}
+		f := cn35game.GuildRules.Fields[fi]
 		cost, gp = f.PrayBP, int64(f.PrayGP)
 		if action == "help" {
 			cost, gp = f.HelpBP, int64(f.HelpGP)
 		}
-		key := opKeyOr(opKey, action+":"+sessID)
+		// 应援/祈祷是**可重复点击**的动作（同一场次可多次买 GP），
+		// 因此无键时每次生成新动作键：客户端不发 op_key，服务端无法区分
+		// 「用户连点」与「网络重发」，这里沿用 2026-10-03 已声明边界
+		// （无键 help/pray 不保证重发去重）；显式 op_key 仍严格幂等。
+		key := opKey
+		if key == "" {
+			key = action + ":" + sessID + ":" + randHex(8)
+		}
 		var oldSession, oldAction string
 		err = tx.QueryRow(`SELECT session_id,action,gp_delta,bp_cost FROM cn35_gw_actions WHERE user_id=? AND op_key=?`, userID, key).Scan(&oldSession, &oldAction, &gp, &cost)
 		if err == nil {
@@ -1283,17 +1609,20 @@ func (s *Store) GWAttackOpen(userID, targetGuildID string, extraTargets []string
 				return err
 			}
 			effects := cn35game.GWEffects{Version: 1, InitialSP: 500 + sp, UnitHP: 1, UnitAT: 1, UnitToughness: 1}
-			eq, err := tx.Query(`SELECT type_id,level FROM cn35_guild_equipment WHERE guild_id=?`, gid)
+			// GC-04：效果等级一律由 point 反解（不读可能落后的 level 列）；
+			// sp 的初始 SP 加成 = 祭坛 value（25×level），与读面 effect 同源。
+			eq, err := tx.Query(`SELECT type_id,point FROM cn35_guild_equipment WHERE guild_id=?`, gid)
 			if err != nil {
 				return err
 			}
 			for eq.Next() {
 				var typ string
-				var level int
-				if err = eq.Scan(&typ, &level); err != nil {
+				var point int64
+				if err = eq.Scan(&typ, &point); err != nil {
 					eq.Close()
 					return err
 				}
+				level := cn35game.GuildEquipLevel(point)
 				bonus := float64(level) * cn35game.GuildRules.EquipUnitBonusPerLevel
 				switch typ {
 				case "sp":
@@ -1315,32 +1644,26 @@ func (s *Store) GWAttackOpen(userID, targetGuildID string, extraTargets []string
 				if err = tx.QueryRow(`SELECT seed_powerup_rate FROM cn35_gw_participants WHERE session_id=? AND guild_id=?`, sessID, target).Scan(&prayer); err != nil {
 					return err
 				}
-				rows, err := tx.Query(`SELECT d.user_id,d.slot,d.monster_uuid,m.monster_id,m.level FROM cn35_guild_defense d JOIN cn35_player_monsters m ON m.user_id=d.user_id AND m.uuid=d.monster_uuid JOIN cn35_guild_members mem ON mem.user_id=d.user_id WHERE mem.guild_id=? ORDER BY d.user_id,d.slot`, target)
+				defs, err := defenseSnapshotTx(tx, target)
 				if err != nil {
 					return err
 				}
-				before := len(snapshot)
-				for rows.Next() {
-					var d cn35game.GWDefenseMonster
-					if err = rows.Scan(&d.OwnerUserID, &d.Slot, &d.MonsterUUID, &d.MonsterID, &d.Level); err != nil {
-						rows.Close()
-						return err
-					}
-					d.GuildID = target
+				if len(defs) == 0 {
+					return cn35game.ErrGWNoDefense
+				}
+				for _, d := range defs {
 					d.HPBonus = prayer
 					if cn35game.GuildRules.PrayHPBonus > 0 {
 						d.ATBonus = prayer * cn35game.GuildRules.PrayATBonus / cn35game.GuildRules.PrayHPBonus
 					}
 					snapshot = append(snapshot, d)
 				}
-				if err = rows.Close(); err != nil {
-					return err
-				}
-				if len(snapshot) == before {
-					return cn35game.ErrGWNoDefense
-				}
 			}
-			cost := cn35game.GuildRules.Fields[cn35game.GuildFieldIndex(local)].AttackBPCost(len(targets))
+			afi := cn35game.GuildActableFieldIndex(local)
+			if afi < 0 {
+				return cn35game.ErrGWNoSession
+			}
+			cost := cn35game.GuildRules.Fields[afi].AttackBPCost(len(targets))
 			if err = bpSpendTx(tx, userID, cost); err != nil {
 				return err
 			}
@@ -1477,6 +1800,53 @@ func (s *Store) GWAttackSettle(userID, battleID string, win bool, reportTime int
 			return cn35game.ErrGWAttackState
 		}
 		a.Status = newStatus
+		// 迟到结果规则（GUILDLIFE350-09，重建规则）：场次已关场/已结算时
+		// 到达的 bp_paid 出击结果只落战斗终态与个人贡献审计，**不**改已结榜
+		// GP、不发奖、不参与掠夺——避免「结算/奖励分别各对却互相矛盾」。
+		var sessStatus string
+		if err := tx.QueryRow(`SELECT status FROM cn35_gw_sessions
+			WHERE session_id=?`, a.SessionID).Scan(&sessStatus); err != nil {
+			return err
+		}
+		if sessStatus != "open" {
+			// 已付费战斗不因关场丢失结果（保留 2026-10-03 跨关场验收）：
+			// 战斗终态、个人贡献审计、玩家个人胜利奖励与演出 GP 照常；
+			// 但**不再**改写场次排名/公会 gp 累计，也不做掠夺转移——
+			// 结榜与已发奖不被迟到结果污染（2026-10-27 设计 P0）。
+			res.LateResult = true
+			res.GPDelta = gp
+			winCnt := 0
+			if win {
+				winCnt = 1
+			}
+			if _, err := tx.Exec(`INSERT INTO cn35_gw_member_scores
+				(session_id,user_id,guild_id,attack_count,win_count,gp_earned,updated_at)
+				VALUES (?,?,?,1,?,?,?)
+				ON CONFLICT(session_id,user_id) DO UPDATE SET
+				attack_count=attack_count+1,win_count=win_count+excluded.win_count,
+				gp_earned=gp_earned+excluded.gp_earned,updated_at=excluded.updated_at`,
+				a.SessionID, userID, a.GuildID, winCnt, gp, nowUTC()); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(`INSERT INTO cn35_gw_actions
+				(session_id,user_id,op_key,action,target_guild_id,bp_cost,gp_delta,result,created_at)
+				VALUES (?,?,?,'attack',?,?,?,?,?)
+				ON CONFLICT(user_id,op_key) DO NOTHING`,
+				a.SessionID, userID, "atk:"+battleID, a.TargetGuildID, a.BPCost, gp,
+				newStatus, nowUTC()); err != nil {
+				return err
+			}
+			if win {
+				res.Rewards = []cn35game.BattleReward{
+					{Key: "guild_asset", Count: cn35game.GuildRules.RewardGuildAsset},
+				}
+				if err := creditBalanceTx(tx, userID, "guild_asset",
+					int64(cn35game.GuildRules.RewardGuildAsset)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 		res.GPDelta = gp
 		if _, err := tx.Exec(`UPDATE cn35_gw_participants SET gp=gp+?
 			WHERE session_id=? AND guild_id=?`, gp, a.SessionID, a.GuildID); err != nil {
@@ -1560,6 +1930,7 @@ func (s *Store) GWAttackSettle(userID, battleID string, win bool, reportTime int
 func (s *Store) GWRankings() ([]cn35game.Guild, error) {
 	rows, err := s.db.Query(`SELECT g.guild_id,g.name,g.rank_id,g.rating,g.gp_total,
 		(SELECT count(*) FROM cn35_guild_members m WHERE m.guild_id=g.guild_id)
+		+ (SELECT count(*) FROM cn35_guild_npc_members n WHERE n.guild_id=g.guild_id)
 		FROM cn35_guilds g ORDER BY g.gp_total DESC, g.created_at LIMIT 100`)
 	if err != nil {
 		return nil, err

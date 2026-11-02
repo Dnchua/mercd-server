@@ -90,7 +90,7 @@ func skillRowDoc(sk PlayerSkill, unitIcons map[int]string) map[string]any {
 	doc["protect_url"] = fmt.Sprintf("/user_skills/protect?uuids[]=%s&protected=%v",
 		sk.UUID, !sk.Protected)
 	if sk.UnitID != nil {
-		doc["unit_id"] = strconv.Itoa(*sk.UnitID)
+		doc["unit_id"] = *sk.UnitID
 		doc["unit_icon_asset_name"] = unitIcons[*sk.UnitID]
 	}
 	return doc

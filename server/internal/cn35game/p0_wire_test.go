@@ -349,3 +349,36 @@ func TestQuestAdditionalOptionWire(t *testing.T) {
 		assertModalError(t, doc, q)
 	}
 }
+
+func TestUserAndGrowthOpsWire(t *testing.T) {
+	ts, st := trainingServer(t, t.TempDir())
+	uid, sk, s0, s1 := establishSession(t, ts.URL, "dev-p0-user-ops")
+	insertMonster(t, st, uid, "mon-evolve-1", 159, 1)
+
+	showDoc := gameJSON(t, ts.URL, "/users/show", uid, sk, s0, s1, "id="+uid, "_method=GET")
+	showData, ok := showDoc["data"].(map[string]any)
+	if !ok || showData["user"] == nil || showData["user_temp"] == nil {
+		t.Fatalf("/users/show data=%v", showDoc)
+	}
+	userTemp := showData["user_temp"].(map[string]any)
+	if userTemp["id"] != uid || userTemp["add_friend_url"] == nil {
+		t.Fatalf("user_temp=%v", userTemp)
+	}
+
+	memoDoc := gameJSON(t, ts.URL, "/users/update_memo", uid, sk, s0, s1, "memo=测试签名", "_method=GET")
+	memoUser := memoDoc["data"].(map[string]any)["user"].(map[string]any)
+	if memoUser["memo"] != "测试签名" || memoDoc["modal"] == nil {
+		t.Fatalf("/users/update_memo=%v", memoDoc)
+	}
+
+	helpDoc := gameJSON(t, ts.URL, "/users/help", uid, sk, s0, s1, "", "_method=GET")
+	if helpDoc["status"] != "success" || helpDoc["modal"] == nil || helpDoc["data"].(map[string]any)["user"] == nil {
+		t.Fatalf("/users/help=%v", helpDoc)
+	}
+
+	evDoc := gameJSON(t, ts.URL, "/user_monsters/evolve_select_info", uid, sk, s0, s1, "", "_method=GET")
+	evData, ok := evDoc["data"].(map[string]any)
+	if !ok || evData["user_monsters_evolve_select_info"] == nil {
+		t.Fatalf("/user_monsters/evolve_select_info=%v", evDoc)
+	}
+}

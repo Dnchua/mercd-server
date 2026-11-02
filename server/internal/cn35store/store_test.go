@@ -59,27 +59,40 @@ func applyLegacy(t *testing.T, db *sql.DB) {
 
 // wantMigrations 当前主线迁移条数与最新迁移名（schema 版本断言真源）。
 // 新增迁移时同步更新此处：数字 + 最新文件名。
-const (
-	wantMigrations  = 33
-	latestMigration = "0033_cn35_guildwar_bp_potion_off.sql"
-)
+//
+// 2026-10-28 GUILDCLOSE350 批次：0038_cn35_guild_bp_storage（T3）、
+// 迁移条数与最新迁移名改为从内嵌迁移目录动态取（GUILDCLOSE350 实施轮：
+// 多人并行追加 0038—0041，硬编码常量会互相踩）。哨兵语义不变：
+// 库内 schema_migrations 必须与内嵌迁移集合逐条一致、且无遗漏。
+func wantMigrationSet(t *testing.T) (int, string) {
+	t.Helper()
+	names, err := database.EmbeddedMigrationNames()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) == 0 {
+		t.Fatal("内嵌迁移为空")
+	}
+	return len(names), names[len(names)-1]
+}
 
 // assertLatestSchema 断言库已应用到当前最新迁移（数量 + 最新名称）。
 func assertLatestSchema(t *testing.T, s *Store) {
 	t.Helper()
+	wantN, wantLast := wantMigrationSet(t)
 	var n int
 	if err := s.DB().QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != wantMigrations {
-		t.Fatalf("migrations applied = %d, want %d", n, wantMigrations)
+	if n != wantN {
+		t.Fatalf("migrations applied = %d, want %d", n, wantN)
 	}
 	var last string
 	if err := s.DB().QueryRow(`SELECT name FROM schema_migrations ORDER BY name DESC LIMIT 1`).Scan(&last); err != nil {
 		t.Fatal(err)
 	}
-	if last != latestMigration {
-		t.Fatalf("最新迁移 = %s, want %s", last, latestMigration)
+	if last != wantLast {
+		t.Fatalf("最新迁移 = %s, want %s", last, wantLast)
 	}
 }
 
@@ -406,18 +419,56 @@ func TestLastServerPersisted(t *testing.T) {
 func TestFailedRegisterLeavesNoRows(t *testing.T) {
 	dir := t.TempDir()
 	s := openStore(t, dir)
+	tables := []string{"cn35_accounts", "cn35_player_profiles", "cn35_player_balances"}
+	before := map[string]int{}
+	for _, tbl := range tables {
+		var c int
+		if err := s.DB().QueryRow(`SELECT count(*) FROM ` + tbl).Scan(&c); err != nil {
+			t.Fatal(err)
+		}
+		before[tbl] = c
+	}
 	_, err := s.Register("", "pw", "dev-x", "uc", "")
 	if !errors.Is(err, cn35game.ErrBadCredential) {
 		t.Fatalf("空名注册应 ErrBadCredential，got %v", err)
 	}
 	var n int
-	for _, tbl := range []string{"cn35_accounts", "cn35_player_profiles", "cn35_player_balances"} {
+	for _, tbl := range tables {
 		if err = s.DB().QueryRow(`SELECT count(*) FROM ` + tbl).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
-		if n != 0 {
-			t.Fatalf("%s 残留 %d 行（失败应整体回滚）", tbl, n)
+		if n != before[tbl] {
+			t.Fatalf("%s 残留 %d 行（want %d，失败应整体回滚）", tbl, n, before[tbl])
 		}
+	}
+}
+
+func TestBuiltinTest001AccountSeededByMigration(t *testing.T) {
+	dir := t.TempDir()
+	s := openStore(t, dir)
+	r, err := s.Login("test001", "test001", "")
+	if err != nil {
+		t.Fatalf("Login test001: %v", err)
+	}
+	uid, _, err := s.ChooseServer(r.HeAccountID, r.Token, "1")
+	if err != nil || uid != "681abf0d7485" {
+		t.Fatalf("ChooseServer test001: uid=%s err=%v", uid, err)
+	}
+	snap, err := s.Snapshot(uid)
+	if err != nil {
+		t.Fatalf("Snapshot test001: %v", err)
+	}
+	if snap.User["level"] != int64(100) || snap.UserCoin["amount"] != int64(2000) || snap.User["game_status"] != 2 {
+		t.Fatalf("unexpected test001 snapshot: level=%v coin=%v game_status=%v",
+			snap.User["level"], snap.UserCoin["amount"], snap.User["game_status"])
+	}
+	units, err := s.Units(uid)
+	if err != nil || len(units) != 1251 {
+		t.Fatalf("test001 units=%d err=%v, want 1251", len(units), err)
+	}
+	monsters, err := s.Monsters(uid)
+	if err != nil || len(monsters) != 235 {
+		t.Fatalf("test001 monsters=%d err=%v, want 235", len(monsters), err)
 	}
 }
 
@@ -623,5 +674,68 @@ func TestAccountBindErrors(t *testing.T) {
 	again, err := s.AccountBind(g.HeAccountID, b.Token, "first-name", "pw-1", "dev-err", "uc", "")
 	if err != nil || again.HeAccountID != g.HeAccountID {
 		t.Fatalf("同名重绑应幂等: %+v err=%v", again, err)
+	}
+}
+
+// TestUpdateMemoPersistence 0044 签名持久化：默认下发“请多多指教！”、
+// UpdateMemo 写入后重启恢复、空串提交不覆盖既有签名、双玩家隔离与幽灵号拒绝。
+func TestUpdateMemoPersistence(t *testing.T) {
+	dir := t.TempDir()
+	s := openStore(t, dir)
+
+	r1, err := s.QuickLogin("dev-memo-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u1, _, err := s.ChooseServer(r1.HeAccountID, r1.Token, "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2, err := s.QuickLogin("dev-memo-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u2, _, err := s.ChooseServer(r2.HeAccountID, r2.Token, "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	snap0, err := s.Snapshot(u1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap0.User["memo"] != "请多多指教！" {
+		t.Fatalf("初始默认 memo = %v, want 请多多指教！", snap0.User["memo"])
+	}
+	if snap0.User["bg_id"] != "" {
+		t.Fatalf("初始默认 bg_id = %v, want 空串", snap0.User["bg_id"])
+	}
+
+	if err := s.UpdateMemo(u1, "Poco验收签名-U05"); err != nil {
+		t.Fatalf("UpdateMemo: %v", err)
+	}
+	if err := s.UpdateMemo(u1, ""); err != nil {
+		t.Fatalf("UpdateMemo 空串幂等: %v", err)
+	}
+	if err := s.UpdateMemo("ghost-uid", "x"); !errors.Is(err, cn35game.ErrNoAccount) {
+		t.Fatalf("幽灵账号 UpdateMemo = %v, want ErrNoAccount", err)
+	}
+	s.Close()
+
+	s2 := openStore(t, dir)
+	defer s2.Close()
+	snap1, err := s2.Snapshot(u1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap1.User["memo"] != "Poco验收签名-U05" {
+		t.Fatalf("重启后 u1 memo = %v, want Poco验收签名-U05", snap1.User["memo"])
+	}
+	snap2, err := s2.Snapshot(u2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap2.User["memo"] != "请多多指教！" {
+		t.Fatalf("重启后 u2 memo 被污染 = %v", snap2.User["memo"])
 	}
 }

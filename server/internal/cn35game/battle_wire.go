@@ -406,17 +406,20 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 	bgm := battleBgm(cat, battle)
 	bid := sess.BattleID
 	doc := map[string]any{
-		"user":              snap.User,
-		"quest":             questDoc,
-		"units":             units,
-		"monsters":          monsters,
-		"main_character":    cat.Defaults.MainCharacter,
-		"appear_table":      appearTable,
-		"help_table":        helpTable,
-		"timezone_table":    timezone,
-		"asset_names":       assets,
-		"bgm_name":          bgm,
-		"exp":               battle.Exp,
+		"user":           snap.User,
+		"quest":          questDoc,
+		"units":          units,
+		"monsters":       monsters,
+		"main_character": cat.Defaults.MainCharacter,
+		"appear_table":   appearTable,
+		"help_table":     helpTable,
+		"timezone_table": timezone,
+		"asset_names":    assets,
+		"bgm_name":       bgm,
+		// exp 必须发会话口径（难度 profile ×收益符文加成），与结算
+		// 入账一致；此前发 battle.Exp 基值导致困难/极难结算屏显示
+		// 经验低于实收。
+		"exp":               sess.Exp,
 		"clear_count":       prog.Clears[quest.ID][diff],
 		"ap_use_url":        "/quests/use_ap?bid=" + bid,
 		"result_url":        "/quests/result?bid=" + bid,
@@ -792,6 +795,10 @@ func questResultHandler(dep Deps) httpapi.Handler {
 			"status":            "success",
 			"data":              data,
 			"next_page_message": resultNextPage(dep, res.Session),
+			// 结算屏展示键（SWFQuestClear.cs:381-407 已证消费）：
+			// spend_time 回显客户端上行的战斗秒数。total_gp/message
+			// 等暂无真值来源的键不下发（客户端有键才渲染对应行）。
+			"spend_time": int(rep.Time),
 		})
 	})
 }

@@ -116,26 +116,31 @@ func dailyShopData(dep Deps, userID string, now time.Time) (map[string]any, erro
 var functionPortalList = []map[string]any{
 	{
 		"id":                 2,
+		"name":               "皇家学院",
 		"texture_asset_name": "common/bnr_college",
 		"show_page_message":  "name=CollegeSelectInterface&base=Common/Pages/Basic&method=Stack",
 	},
 	{
 		"id":                 3,
+		"name":               "羁绊之屋",
 		"texture_asset_name": "common/bnr_unit_friendship",
 		"show_page_message":  "name=UnitFriendshipMainPage&base=Common/Pages/Basic&method=Stack",
 	},
 	{
 		"id":                 DailyShopRules.GoodsID,
+		"name":               "每日面包店",
 		"texture_asset_name": "common/bnr_red_diamond_shop",
 		"show_page_message":  "name=RedDiamondShop&base=Common/Pages/RedDiamondShopPage&method=Stack",
 	},
 	{
 		"id":                 4,
+		"name":               "真爱礼堂",
 		"texture_asset_name": "common/bnr_true_love",
 		"show_page_message":  "name=TrueLoveMainPage&base=Common/Pages/Basic&method=Stack",
 	},
 	{
 		"id":                 5,
+		"name":               "同伴交换所",
 		"texture_asset_name": "common/bnr_unit_exchange_150201",
 		"show_page_message":  "name=UnitExchange&base=Common/Pages/Basic&method=Stack",
 	},

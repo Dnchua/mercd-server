@@ -79,7 +79,11 @@ func Run(ctx context.Context, cfg config.CN35Config, log *slog.Logger) error {
 	var skills cn35game.SkillStore                 // RUNE350-01：符文系统
 	var tutorialTasks cn35game.TutorialTaskStore   // TASK350：新手任务读/写面（0019）
 	var guild cn35game.GuildStore                  // GUILD350-02..08：公会/公会战（0027）
+	var guildClock func() time.Time                // 会战判定时钟（默认 nil=time.Now）
 	var dailyShop cn35game.DailyShopStore          // SHOP350-01：每日商店 0 元购（0031）
+	var loginBonus cn35game.SpringStore            // LOGIN350-02：不可思议之泉读/领面（0035）
+	var signin cn35game.SigninStore                // LOGIN350-02：月签到读/领面（0035）
+	var adventure cn35game.AdventureStore          // LOGIN350-03：登录冒险读/发面（0036）
 	var store *cn35store.Store                     // ROSTER350-03：名册/卡池治理同库
 	if cfg.ListRoutes || cfg.MemMode {
 		accounts, sessions = cn35game.NewMemoryAccounts(), cn35wire.NewMemoryStore()
@@ -112,6 +116,30 @@ func Run(ctx context.Context, cfg config.CN35Config, log *slog.Logger) error {
 		tutorialTasks = st // TASK350：新手任务（进度推导+领取同事务）
 		guild = st         // GUILD350：公会组织/会战（0027 表族）
 		dailyShop = st     // SHOP350-01：每日商店领取台账（0031）
+		loginBonus = st    // LOGIN350-02：泉水累积/领取台账（0035）
+		signin = st        // LOGIN350-02：月签到台账（0035）
+		adventure = st     // LOGIN350-03：登录冒险轮次/位图/发放台账（0036）
+
+		// GUILDLIFE350-13：验收时钟偏移（默认 0）——只影响会战判定 now。
+		if cfg.GuildClockOffset != 0 {
+			offset := cfg.GuildClockOffset
+			st.SetClock(func() time.Time { return time.Now().Add(offset) })
+			guildClock = func() time.Time { return time.Now().Add(offset) }
+		}
+
+		// GUILDLIFE350-04：单机 NPC 公会域。启动时把进程配置（开关/配额）
+		// 落库并做一次有界补池；关闭开关只停止补池/推荐，不删既有数据。
+		if err := st.ConfigureGuildEconomy(cfg.GuildDailyRefill, cfg.GuildSeasonRewards); err != nil {
+			return err
+		}
+		if err := st.ConfigureGuildSolo(cn35store.GuildSoloSettings{
+			Enabled:        cfg.GuildSolo,
+			CandidateCount: cfg.GuildSoloCandidates,
+			OpponentCount:  cfg.GuildSoloOpponents,
+			MaxGuilds:      cfg.GuildSoloMaxGuilds,
+		}); err != nil {
+			return fmt.Errorf("单机 NPC 公会池初始化失败: %w", err)
+		}
 
 		// ROSTER350-02/03：首次启动种子化名册+双池配置。无清单时明确告警，
 		// 运行期抽卡返回"未发布配置"而非静默使用静态表。
@@ -233,7 +261,11 @@ func Run(ctx context.Context, cfg config.CN35Config, log *slog.Logger) error {
 		TutorialTasks:   tutorialTasks,
 		Gacha:           gacha,
 		Guild:           guild,
+		GuildClock:      guildClock,
 		DailyShop:       dailyShop,
+		LoginBonus:      loginBonus,
+		Signin:          signin,
+		Adventure:       adventure,
 		GachaConfig:     gachaCfg,
 		RemoteAssets:    remoteAssets,
 	})

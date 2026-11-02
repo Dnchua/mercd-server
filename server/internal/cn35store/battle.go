@@ -560,8 +560,13 @@ func (s *Store) SettleBattle(userID, battleID string, rep cn35game.BattleReport)
 			case "seed":
 				for i := 0; i < r.Count; i++ {
 					uuid := "mon" + randHex(16)
+					// 掉落体型随机（原作口径：强化仅能推进至 1.70，
+					// 掉落可越界且越界个体天然不可强化）。区间/分布
+					// 为 cn35game.MonsterDropScaleM 占位值（PROPOSED）。
+					scale := cn35game.RollMonsterDropScale()
 					if err := InsertMonsterTx(tx, userID, cn35game.MonsterRecord{
 						UUID: uuid, MonsterID: r.ID, Level: 1,
+						Scale: &scale, RealScale: &scale,
 					}); err != nil {
 						return err
 					}
@@ -654,9 +659,9 @@ func creditBalanceTx(tx *sql.Tx, userID, currency string, delta int64) error {
 // 取代 story350-07「max_exp 恒 100 顺延」临时口径）；同事务维护
 // max_exp=新等级需求（满级保持末档）。值无变化不写行。
 func addExpTx(tx *sql.Tx, userID string, gain int) error {
-	var level, exp int
-	if err := tx.QueryRow(`SELECT level,exp FROM cn35_player_profiles WHERE user_id=?`,
-		userID).Scan(&level, &exp); err != nil {
+	var level, exp, ap int
+	if err := tx.QueryRow(`SELECT level,exp,ap FROM cn35_player_profiles WHERE user_id=?`,
+		userID).Scan(&level, &exp, &ap); err != nil {
 		return err
 	}
 	newLevel, newExp := cn35game.ApplyUserExp(level, exp, gain)
@@ -665,14 +670,31 @@ func addExpTx(tx *sql.Tx, userID string, gain int) error {
 	}
 	now := nowUTC()
 	if newLevel > level {
-		// 升级：max_ap=level+19 且 AP 自动补满（用户口径 2026-10-01）；
-		// ap_updated_at 重置锚点，恢复计时从满 AP 重新开始。
+		// 升级：max_ap=level+19。AP 按用户 2026-10-20 更正口径**叠加增量**
+		// （旧口径「直接补满」作废）：newAP = 旧AP + (新等级上限-旧等级上限)。
+		// 触顶时按 recoverAPTx 同口径重置恢复锚点，否则保留原锚点继续恢复。
+		oldMax := cn35game.UserMaxAP(level)
+		newMax := cn35game.UserMaxAP(newLevel)
+		newAP := ap + (newMax - oldMax)
+		if newAP < 0 {
+			newAP = 0
+		}
+		if newAP > newMax {
+			newAP = newMax
+		}
+		if newAP >= newMax {
+			_, err := tx.Exec(`UPDATE cn35_player_profiles
+				SET level=?,exp=?,max_exp=?,max_ap=?,ap=?,ap_updated_at=?,updated_at=?
+				WHERE user_id=?`,
+				newLevel, newExp, cn35game.UserNeedExpCapped(newLevel),
+				newMax, newAP, now, now, userID)
+			return err
+		}
 		_, err := tx.Exec(`UPDATE cn35_player_profiles
-			SET level=?,exp=?,max_exp=?,max_ap=?,ap=?,ap_updated_at=?,updated_at=?
+			SET level=?,exp=?,max_exp=?,max_ap=?,ap=?,updated_at=?
 			WHERE user_id=?`,
 			newLevel, newExp, cn35game.UserNeedExpCapped(newLevel),
-			cn35game.UserMaxAP(newLevel), cn35game.UserMaxAP(newLevel),
-			now, now, userID)
+			newMax, newAP, now, userID)
 		return err
 	}
 	_, err := tx.Exec(`UPDATE cn35_player_profiles SET level=?,exp=?,max_exp=?,updated_at=? WHERE user_id=?`,

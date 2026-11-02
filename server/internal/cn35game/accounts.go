@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -77,6 +78,8 @@ type AccountStore interface {
 	// UsersUpdate users/update 原子写（契约 12）：End 步 user_name 与
 	// tutorial_finish 同事务落地，失败不留半写；tutorial_finish 重复置位幂等成功。
 	UsersUpdate(userID, name string, tutorialFinish bool) error
+	// UpdateMemo users/update_memo 玩家个人签名持久化（UserPage.cs:629-639）。
+	UpdateMemo(userID, memo string) error
 	// Snapshot 玩家快照（preset_data 的 data.user/user_coin 来源）。
 	Snapshot(userID string) (*PlayerSnapshot, error)
 }
@@ -90,6 +93,7 @@ type memAccount struct {
 	sk           string
 	userName     string // HE 登录名（account_name）
 	nickname     string // 游戏昵称（user_name）
+	memo         string // 玩家个人签名（memo）
 	deviceID     string
 	lastServerID string
 	tutorialDone bool
@@ -336,6 +340,20 @@ func (m *MemoryAccounts) UsersUpdate(userID, name string, tutorialFinish bool) e
 	return nil
 }
 
+// UpdateMemo 实现 AccountStore：更新内存桩内玩家个人签名。
+func (m *MemoryAccounts) UpdateMemo(userID, memo string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a := m.byUserID[userID]
+	if a == nil {
+		return ErrNoAccount
+	}
+	if memo != "" {
+		a.memo = memo
+	}
+	return nil
+}
+
 // cn350 初始玩家占位值（开发桩）。
 //
 //   - leader_unit_id=348：CN350-05 审计证实 unit_large_ns_* 仅 348/375 内嵌，
@@ -398,12 +416,205 @@ func (m *MemoryAccounts) Snapshot(userID string) (*PlayerSnapshot, error) {
 	if a.nickname != "" {
 		user["user_name"] = a.nickname
 	}
+	if a.memo != "" {
+		user["memo"] = a.memo
+	}
 	if a.tutorialDone {
 		user["game_status"] = 2
 	}
+	ApplyDefaultUserWireFields(user, nil)
 	return &PlayerSnapshot{
 		User:        user,
 		UserCoin:    map[string]any{"amount": 0},
 		UserSummary: map[string]any{},
 	}, nil
+}
+
+// ApplyDefaultUserWireFields 补齐国服 3.5.0 data.user 协议基线字段（货币/代币、
+// 道具库存哈希、经验分项、档案时间戳与主页环境挂件），已由存储层显式赋值的键保持不变。
+func ApplyDefaultUserWireFields(user map[string]any, balances map[string]int64) {
+	bal := func(k string) int64 {
+		if balances == nil {
+			return 0
+		}
+		return balances[k]
+	}
+	setDefault := func(k string, v any) {
+		if _, exists := user[k]; !exists {
+			user[k] = v
+		}
+	}
+	// 1. 货币/代币类（11 项）
+	setDefault("p_medal", bal("p_medal"))
+	setDefault("friend_medal", bal("friend_medal"))
+	setDefault("cp", int64(120))
+	setDefault("max_cp", int64(120))
+	setDefault("lc", int64(3))
+	setDefault("max_lc", int64(3))
+	setDefault("rc", int64(5))
+	setDefault("max_rc", int64(5))
+	setDefault("seal", bal("seal"))
+	setDefault("petal", bal("petal"))
+	setDefault("month_card_gacha_ticket", bal("month_card_gacha_ticket"))
+
+	// 2. 道具库存哈希类（9 项）
+	setDefault("chest_paper", map[string]any{"200": int64(0), "201": int64(0)})
+	setDefault("consume_ring", map[string]any{"1": int64(0)})
+	setDefault("elements", map[string]any{"1": int64(0), "2": int64(0), "3": int64(0), "4": int64(0), "5": int64(0)})
+	setDefault("potions", map[string]any{"1": int64(0), "2": int64(0), "3": int64(0)})
+	setDefault("scout_books", map[string]any{"1": int64(0), "99": int64(0), "100": int64(0), "101": int64(0)})
+	setDefault("evolve_items", map[string]any{"1": int64(0)})
+	setDefault("evolve_fancy_items", map[string]any{"102": int64(0), "203": int64(0), "301": int64(0), "502": int64(0), "503": int64(0)})
+	setDefault("upgrade_items", map[string]any{"1": int64(0), "2": int64(0), "3": int64(0)})
+	setDefault("token_money_hash", map[string]any{"1": int64(0), "2": int64(0), "3": int64(0)})
+	if pi, ok := user["powerup_items"].(map[string]int64); ok {
+		if len(pi) == 0 {
+			pi["1"] = 0
+		}
+	} else if piAny, ok := user["powerup_items"].(map[string]any); ok {
+		if len(piAny) == 0 {
+			piAny["1"] = int64(0)
+		}
+	} else {
+		setDefault("powerup_items", map[string]int64{"1": 0})
+	}
+
+	// 3. 经验分项类（3 项）
+	setDefault("attack_exp", int64(0))
+	setDefault("help_exp", int64(0))
+	setDefault("pray_exp", int64(0))
+
+	// 4. 档案、时间戳与主页展示字段
+	setDefault("memo", "请多多指教！")
+	setDefault("joined_at", "2017/10/26 20:06:51")
+	setDefault("logged_at", "2017/11/10 12:00:00")
+	setDefault("last_logged_at", "2017/11/10 11:00:00")
+	setDefault("updated_at", "2017/11/10 12:00:00")
+	setDefault("updated_at_i", int64(1510286400))
+	setDefault("ap_updated_at", "2017/11/10 12:00:00")
+	setDefault("bp_updated_at", "2017/11/10 12:00:00")
+	setDefault("int_ap_updated_at", int64(1510286400))
+	setDefault("max_ap_recovery_time", int64(0))
+	setDefault("main_character_id", int64(100384))
+	// BackgroundParts.cs:78-105：bg_id 非空时会拼 storybackground/storybackground<bg_id>
+	// 并在 while(!IsRequestDone) 等待；默认置空以使用页面标准背景 common/bg-house_2。
+	setDefault("bg_id", "")
+	setDefault("bgm_id", "00001")
+	setDefault("battle_id", "")
+	setDefault("guild_id", "")
+	setDefault("guild_joined_at", "2017/10/26 20:06:51")
+	setDefault("guild_asset_count", bal("guild_asset"))
+	setDefault("guild_asset_count_str", strconv.FormatInt(bal("guild_asset"), 10))
+	setDefault("medal", bal("medal"))
+	setDefault("medal_str", strconv.FormatInt(bal("medal"), 10))
+	setDefault("hard_mode_area_id", int64(1))
+	setDefault("hard_mode_quest_id", int64(1))
+	setDefault("hard_mode_version", int64(1))
+	setDefault("help_community", int64(1))
+	setDefault("help_guild", int64(1))
+	setDefault("help_id", "")
+	setDefault("helped_at", "2017/11/10 12:00:00")
+	setDefault("bind_on_registe", nil)
+	setDefault("bind_temp_email_update_at", nil)
+	setDefault("bind_update_at", int64(1509018011))
+	setDefault("black_gacha_saved", int64(0))
+	setDefault("black_gacha_times", int64(0))
+	setDefault("cake", int64(0))
+	setDefault("couplet", int64(0))
+	setDefault("sakura_ticket", int64(0))
+	setDefault("talisman", int64(0))
+	setDefault("community_topic_id", int64(0))
+	setDefault("consume_ring_1", int64(0))
+	setDefault("force_rush", false)
+	setDefault("force_rush_count", int64(0))
+	setDefault("rush_count", int64(0))
+	setDefault("rush_mode", "0")
+	setDefault("rush_mode_ap", int64(0))
+	setDefault("good_feel_item", map[string]any{})
+	setDefault("good_feel_item2", map[string]any{"1": int64(0)})
+	setDefault("invitor_id", nil)
+	setDefault("last_login_time", nil)
+	setDefault("lock_sell", nil)
+	setDefault("modify_pass_update_at", int64(0))
+	setDefault("payment_bonus_his", []any{})
+	setDefault("payment_bonus_version", int64(1))
+	setDefault("payment_discount_his", []any{})
+	setDefault("payment_discount_version", int64(1))
+	setDefault("quest_weather_valve", nil)
+	setDefault("rest_activity", nil)
+	setDefault("spring_stone", nil)
+	setDefault("r_id", "0")
+	setDefault("r_key", "")
+	setDefault("real_name_at", "2017/10/26 20:06:51")
+	setDefault("real_name_binded_phone", "")
+	setDefault("real_name_poped", int64(1))
+	setDefault("scout_book_1", int64(0))
+	setDefault("scout_book_2", int64(0))
+	setDefault("scout_book_3", int64(0))
+	setDefault("scout_book_99", int64(0))
+	setDefault("scout_book_100", int64(0))
+	setDefault("scout_book_101", int64(0))
+	setDefault("token_money_1", int64(0))
+	setDefault("token_money_2", int64(0))
+	setDefault("token_money_3", int64(0))
+	setDefault("te_ended_at", int64(0))
+	setDefault("te_level", int64(0))
+	setDefault("share_monsters", map[string]any{
+		"1": map[string]any{
+			"monster_id": int64(1), "protected": false, "scale": 1.0, "scale_limit": 1.8, "unit_id": int64(0), "uuid": "",
+		},
+	})
+	setDefault("tutorial_task_current_level", int64(1))
+	setDefault("tutorial_task_done_list", []any{})
+	setDefault("tutorial_task_finished_level", []any{int64(1)})
+	setDefault("tutorial_task_version", int64(1))
+	defaultTaskList := func() map[string]any {
+		return map[string]any{
+			"tasks":      []any{map[string]any{"id": int64(1), "count": int64(0), "fetched": false}},
+			"updated_at": int64(1509018011),
+		}
+	}
+	setDefault("anniversary_task_list", defaultTaskList())
+	setDefault("anniversary2_task_list", defaultTaskList())
+	setDefault("new_year_task_list", defaultTaskList())
+	setDefault("school_festival_daily_tasks", defaultTaskList())
+	setDefault("user_recall_tasks", map[string]any{"tasks": []any{}, "updated_at": int64(1509018011)})
+	// WeatherParts.cs:32-38：effect_asset_name 为空串时走 ClearWeather() 静默清理，
+	// 避免 Resources.Load 报 "Can not load weather"。
+	setDefault("weather", map[string]any{"id": int64(1), "effect_asset_name": "", "offset_y": int64(0), "offset_z": int64(0)})
+	// ToyPart.cs:203-246：id=1 对应内嵌 unit/unit_1，动画名使用 s/r（与 serve_app_conf_android.json 一致）。
+	setDefault("toy", map[string]any{
+		"id": int64(1), "drag": true, "scaleX": 1.0, "scaleY": 1.0,
+		"collider_center_x": 0.0, "collider_center_y": 0.0, "collider_size_x": 100.0, "collider_size_y": 100.0,
+		"ss_toy": map[string]any{
+			"id": int64(1), "init_animation": "s",
+			"ai": map[string]any{
+				"animation": "r", "idle_animation": "s", "idle_time": 3.0, "init_on_off": true, "speed": 1.0,
+				"bound_min_x": -200.0, "bound_max_x": 200.0, "bound_min_y": -100.0, "bound_max_y": 100.0,
+			},
+			"on_press":   map[string]any{"ai_on_off": false, "animation": "s"},
+			"on_release": map[string]any{"ai_on_off": true, "animation": "s"},
+		},
+	})
+}
+
+// ApplyDefaultUserCoinWireFields 为 data.user_coin 补齐真实国服抓包中的完整字段。
+func ApplyDefaultUserCoinWireFields(userCoin map[string]any) {
+	if userCoin == nil {
+		return
+	}
+	setDefault := func(k string, v any) {
+		if _, exists := userCoin[k]; !exists {
+			userCoin[k] = v
+		}
+	}
+	setDefault("amount", int64(0))
+	setDefault("paid_amount", int64(0))
+	setDefault("monthly_amount", int64(0))
+	setDefault("monthly_coins", int64(0))
+	setDefault("id", int64(1))
+	setDefault("last_purchased_yyyymm", "")
+	setDefault("created_at", "2017/10/26 20:06:51")
+	setDefault("updated_at", "2017/11/10 12:00:00")
+	setDefault("expired_at", "2017/11/10 12:00:00")
 }

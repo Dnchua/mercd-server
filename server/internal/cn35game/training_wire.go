@@ -94,6 +94,7 @@ func unitTrainingHandler(dep Deps) httpapi.Handler {
 		numericFieldsToNumber(snap.User, "leader_unit_id", "helper_unit_id")
 		data["user"] = snap.User
 		data["user_coin"] = snap.UserCoin
+		data["albums"] = nil
 		c.Decoded["trained"] = true
 		c.Decoded["after"] = after
 		return cn35wire.MarshalJSON(map[string]any{
@@ -117,38 +118,44 @@ func unitTrainingHandler(dep Deps) httpapi.Handler {
 //   - /user_units/share      → 分享（规则未取证）
 //   - 其他                    → 未取证写面
 func unitGrowthUnsupportedHandler(dep Deps) httpapi.Handler {
-	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
-		path := c.R.URL.Path
-		title, body := "功能未启用", "该功能尚未在本地服务端实现。"
-		switch {
-		case strings.Contains(path, "sell"):
-			// sell?unit_id=&price=：price 由客户端回传，服务端无价格规则
-			// 取证来源，不做零价假发放。
-			title, body = "出售未启用", "出售价格未取证，暂不开放出售。"
-		case strings.Contains(path, "upgrade"):
-			title, body = "潜能强化未启用", "潜能配置来源尚未取证，暂不开放潜能强化。"
-		case strings.Contains(path, "powerup"):
-			title, body = "同伴强化未启用", "同伴强化规则与消耗配置未取证，暂不开放强化。"
-		case strings.Contains(path, "awake") || strings.Contains(path, "duplicate"):
-			title, body = "觉醒未启用", "觉醒上行路径尚未取证，暂不开放觉醒。"
-		case strings.Contains(path, "evolve"):
-			// evolve/evolve_egg/evolve_monster_select_info/show_evolve_board。
-			title, body = "同伴进化未启用", "同伴进化映射与消耗配置未取证，暂不开放进化。"
-		case strings.Contains(path, "dismantle"), strings.Contains(path, "decompose"),
-			strings.Contains(path, "compose"):
-			title, body = "分解/合成未启用", "分解/合成配置未取证，暂不开放相关操作。"
-		case strings.Contains(path, "share"):
-			title, body = "同伴分享未启用", "同伴分享规则未取证，暂不开放分享。"
+	unitsH := userUnitsHandler(dep)
+	return func(c *httpapi.Ctx) error {
+		if c.R.URL.Path == "/user_units/" {
+			return unitsH(c)
 		}
-		c.Decoded = map[string]any{
-			"cn35": true, "uid": req.UserID, "endpoint": "user_units_unsupported",
-			"path": path, "unsupported": true,
-		}
-		return cn35wire.MarshalJSON(map[string]any{
-			"status": "error",
-			"modal":  map[string]any{"type": "ok", "title": title, "body": body},
-		})
-	})
+		return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
+			path := c.R.URL.Path
+			title, body := "功能未启用", "该功能尚未在本地服务端实现。"
+			switch {
+			case strings.Contains(path, "sell"):
+				// sell?unit_id=&price=：price 由客户端回传，服务端无价格规则
+				// 取证来源，不做零价假发放。
+				title, body = "出售未启用", "出售价格未取证，暂不开放出售。"
+			case strings.Contains(path, "upgrade"):
+				title, body = "潜能强化未启用", "潜能配置来源尚未取证，暂不开放潜能强化。"
+			case strings.Contains(path, "powerup"):
+				title, body = "同伴强化未启用", "同伴强化规则与消耗配置未取证，暂不开放强化。"
+			case strings.Contains(path, "awake") || strings.Contains(path, "duplicate"):
+				title, body = "觉醒未启用", "觉醒上行路径尚未取证，暂不开放觉醒。"
+			case strings.Contains(path, "evolve"):
+				// evolve/evolve_egg/evolve_monster_select_info/show_evolve_board。
+				title, body = "同伴进化未启用", "同伴进化映射与消耗配置未取证，暂不开放进化。"
+			case strings.Contains(path, "dismantle"), strings.Contains(path, "decompose"),
+				strings.Contains(path, "compose"):
+				title, body = "分解/合成未启用", "分解/合成配置未取证，暂不开放相关操作。"
+			case strings.Contains(path, "share"):
+				title, body = "同伴分享未启用", "同伴分享规则未取证，暂不开放分享。"
+			}
+			c.Decoded = map[string]any{
+				"cn35": true, "uid": req.UserID, "endpoint": "user_units_unsupported",
+				"path": path, "unsupported": true,
+			}
+			return cn35wire.MarshalJSON(map[string]any{
+				"status": "error",
+				"modal":  map[string]any{"type": "ok", "title": title, "body": body},
+			})
+		})(c)
+	}
 }
 
 // findUnitRecord 在会话账号库存中定位 unit_id。

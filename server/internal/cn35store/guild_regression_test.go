@@ -32,6 +32,10 @@ func gwFixture(t *testing.T, s *Store, n int) ([]string, []string, time.Time) {
 	}
 	return users, guilds, now
 }
+
+// gwStartBP 合成账号初始 BP（与 cn35_player_profiles 默认值一致）。
+const gwStartBP = 300
+
 func gwBP(t *testing.T, s *Store, uid string) int {
 	t.Helper()
 	var bp int
@@ -54,9 +58,13 @@ func TestGWRepeatedActionsAndConflict(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// BP 成本按原服录包口径：help_bp=50、pray_bp=15（旧占位 help=25 已废弃，
+	// 见 plans/cn350-guild-live-closure-2026-10-28 阶段3与 GC-05）。
+	f := cn35game.GuildRules.Fields[cn35game.GuildActableFieldIndex(now)]
+	wantBP := gwStartBP - 2*f.HelpBP - 2*f.PrayBP
 	v, err := s.GWState(u[0], now)
-	if err != nil || v.Power != 800 || v.HelpCount != 2 || v.PrayCount != 2 || v.SeedPowerup != 1.04 || gwBP(t, s, u[0]) != 220 {
-		t.Fatalf("repeated actions: %+v bp=%d err=%v", v, gwBP(t, s, u[0]), err)
+	if err != nil || v.Power != 800 || v.HelpCount != 2 || v.PrayCount != 2 || v.SeedPowerup != 1.04 || gwBP(t, s, u[0]) != wantBP {
+		t.Fatalf("repeated actions: %+v bp=%d want=%d err=%v", v, gwBP(t, s, u[0]), wantBP, err)
 	}
 	if _, _, err = s.GWHelpPray(u[0], "help", "retry", now); err != nil {
 		t.Fatal(err)
@@ -66,7 +74,7 @@ func TestGWRepeatedActionsAndConflict(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if gwBP(t, s, u[0]) != 195 {
+	if gwBP(t, s, u[0]) != wantBP-f.HelpBP {
 		t.Fatal("replay charged again")
 	}
 	if _, _, err = s.GWHelpPray(u[0], "pray", "retry", now); !errors.Is(err, cn35game.ErrGuildOp) {
@@ -191,7 +199,16 @@ func TestGWEffectsFreezeAndEmptyExtraRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, _, _, err := s.GWAttackOpen(u[0], g[1], []string{g[2]}, "normal", 1, 5, "retry", now)
-	if err != nil || a.Effects.InitialSP != 950 || a.Effects.UnitHP != 1.005 || a.DefenseSnapshot[0].HPBonus != 0.02 {
+	// GC-04：效果等级由重建阈值曲线反解（200 point 在曲线上是 1 级，
+	// T(2)=17,700），因此初始 SP = 基础 900 + 1×25，体力加成 = 1×0.25%。
+	// 期望值全部由曲线/规则常量推导，不写魔法数。
+	eqLevel := cn35game.GuildEquipLevel(200)
+	if eqLevel != 1 {
+		t.Fatalf("曲线自检: 200 point 应为 1 级，got %d", eqLevel)
+	}
+	wantSP := 900 + eqLevel*cn35game.GuildRules.EquipSPPerLevel
+	wantHP := 1 + float64(eqLevel)*cn35game.GuildRules.EquipUnitBonusPerLevel
+	if err != nil || a.Effects.InitialSP != wantSP || a.Effects.UnitHP != wantHP || a.DefenseSnapshot[0].HPBonus != 0.02 {
 		t.Fatalf("effects: %+v %v", a, err)
 	}
 	s.GWHelpPray(u[0], "help", "", now)

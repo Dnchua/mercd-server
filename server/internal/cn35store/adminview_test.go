@@ -11,6 +11,10 @@ import (
 func TestAdminViewPlayersAndDetail(t *testing.T) {
 	dir := t.TempDir()
 	s := openStore(t, dir)
+	baseOverview, err := s.AdminOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
 	uid := seedAccount(t, s, "admin-view-a")
 	uidB := seedAccount(t, s, "admin-view-b")
 	clearPresents(t, s, uid, uidB)
@@ -34,10 +38,11 @@ func TestAdminViewPlayersAndDetail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 列表：总数 + uid 过滤 + nickname 过滤
+	// 列表：总数 + uid 过滤 + nickname 过滤（含 0045 内置 test001 账号）
+	wantPlayers := int(baseOverview.Accounts) + 2
 	rows, total, err := s.AdminPlayers(cn35game.AdminPlayerFilter{Page: 1, PageSize: 10})
-	if err != nil || total != 2 || len(rows) != 2 {
-		t.Fatalf("AdminPlayers: total=%d rows=%d err=%v", total, len(rows), err)
+	if err != nil || total != wantPlayers || len(rows) != wantPlayers {
+		t.Fatalf("AdminPlayers: total=%d rows=%d want=%d err=%v", total, len(rows), wantPlayers, err)
 	}
 	rows, _, err = s.AdminPlayers(cn35game.AdminPlayerFilter{Nickname: "测试玩家", Page: 1, PageSize: 10})
 	if err != nil || len(rows) != 1 || rows[0].UserID != uid {
@@ -86,7 +91,7 @@ func TestAdminViewPlayersAndDetail(t *testing.T) {
 	if len(units) != 0 {
 		t.Fatalf("uidB 应零库存: %v", units)
 	}
-	units, _, err = s.AdminCharacters(cn35game.AdminCharFilter{UnitID: 152, Page: 1, PageSize: 10})
+	units, _, err = s.AdminCharacters(cn35game.AdminCharFilter{UserID: uid, UnitID: 152, Page: 1, PageSize: 10})
 	if err != nil || len(units) != 1 || units[0].UnitID != 152 {
 		t.Fatalf("unit_id 精确过滤: %v %v", units, err)
 	}
@@ -128,10 +133,15 @@ func TestAdminViewPlayersAndDetail(t *testing.T) {
 		t.Fatalf("status 推导: %v", st)
 	}
 
-	// 总览计数
+	// 总览计数（相对迁移基线增量）
 	o, err := s.AdminOverview()
-	if err != nil || o.Accounts != 2 || o.Units != 5 || o.Monsters != 1 || o.Presents != 1 || o.Infos != 2 {
-		t.Fatalf("overview: %+v err=%v", o, err)
+	if err != nil ||
+		o.Accounts != baseOverview.Accounts+2 ||
+		o.Units != baseOverview.Units+5 ||
+		o.Monsters != baseOverview.Monsters+1 ||
+		o.Presents != baseOverview.Presents+1 ||
+		o.Infos != baseOverview.Infos+2 {
+		t.Fatalf("overview: %+v base=%+v err=%v", o, baseOverview, err)
 	}
 }
 
@@ -139,12 +149,17 @@ func TestAdminViewPlayersAndDetail(t *testing.T) {
 func TestAdminViewPagination(t *testing.T) {
 	dir := t.TempDir()
 	s := openStore(t, dir)
+	baseOverview, err := s.AdminOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, dev := range []string{"pg-a", "pg-b", "pg-c"} {
 		seedAccount(t, s, dev)
 	}
+	wantTotal := int(baseOverview.Accounts) + 3
 	rows, total, err := s.AdminPlayers(cn35game.AdminPlayerFilter{Page: 2, PageSize: 2})
-	if err != nil || total != 3 || len(rows) != 1 {
-		t.Fatalf("page2: total=%d rows=%d err=%v", total, len(rows), err)
+	if err != nil || total != wantTotal || len(rows) != 2 {
+		t.Fatalf("page2: total=%d rows=%d wantTotal=%d err=%v", total, len(rows), wantTotal, err)
 	}
 	rows, _, err = s.AdminPlayers(cn35game.AdminPlayerFilter{Page: 9, PageSize: 2})
 	if err != nil || len(rows) != 0 {

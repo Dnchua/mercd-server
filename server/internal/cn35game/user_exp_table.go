@@ -249,11 +249,33 @@ func UserNeedExpCapped(level int) int {
 	return UserNeedExp(level)
 }
 
-// UserExpWindow 结算条两档窗口 [本级需求, 下一级需求]（SWFQuestClear 按
-// needExpTable[expIndex] 消费）。1 级输出 [100,100]，与生产抓包样本逐值一致；
-// 满级侧按 UserNeedExpCapped 回退，不产 0 档。
+// UserExpWindow 结算条等级需求窗口（SWFQuestClear 按 needExpTable[expIndex]
+// 消费：UpdateGauge 每越一级 expIndex++，下一帧再读 needExpTable[expIndex]）。
+// 仅发两档时单场跨越 ≥2 级（低等级需求 100/级）即越界抛
+// ArgumentOutOfRangeException，结算屏经验计数动画冻结在中途——2026-10-13
+// 实机复现（hard quest1 +200exp，1 级起跨 2 级，计数停在 154）。
+// 因此下发本级起 userExpWindowSize 档；低等级段累计需求远大于任何单场
+// 结算经验，窗口长度足够覆盖跳级。表尾截到末档非 0 需求（除法分母），
+// 满级侧按 UserNeedExpCapped 回退。
+const userExpWindowSize = 32
+
 func UserExpWindow(level int) []int64 {
-	return []int64{int64(UserNeedExpCapped(level)), int64(UserNeedExpCapped(level + 1))}
+	if level < 1 {
+		level = 1
+	}
+	if level >= UserLevelMax {
+		return []int64{int64(UserNeedExpCapped(UserLevelMax))}
+	}
+	end := level - 1 + userExpWindowSize
+	// userNeedExpTable 末位（2100 级）为 0 占位，不可作除法分母。
+	if end > UserLevelMax-1 {
+		end = UserLevelMax - 1
+	}
+	out := make([]int64, 0, end-(level-1))
+	for i := level - 1; i < end; i++ {
+		out = append(out, int64(userNeedExpTable[i]))
+	}
+	return out
 }
 
 // ApplyUserExp 经验入账与逐级升级：exp+=gain 后按表逐级扣减；封顶后经验冻结

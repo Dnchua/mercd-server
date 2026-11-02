@@ -12,8 +12,11 @@
 //   - 响应语义「空集 = 无内容」：服务端重建；原服在无公告/无礼物时的确切
 //     响应字节未证，故只声明「客户端有显式空态分支、空集安全」。
 //   - user_presents / infos 的**内容**为运营数据，入库（0015），非逻辑常量。
-//   - adventure / choose_attr_page 为玩法内容，本期无生产数据来源，
-//     返回结构完整空态并在契约卡标注「原服语义未证」。
+//   - choose_attr_page 为玩法内容，无生产数据来源，返回结构完整空态并在
+//     契约卡标注「原服语义未证」。
+//   - adventure 自 LOGIN350-03（迁移 0036）起为**真实读面**（轮次配置 + 逐日
+//     位图 + 当日奖励经 /user_presents/ 内容池发放），实现见 adventure_wire.go；
+//     本文件的 adventureEmptyStateData 只作为「未装配/未配置轮次」的合法回落。
 package cn35game
 
 import (
@@ -109,7 +112,10 @@ func infosHandler(dep Deps) httpapi.Handler {
 	})
 }
 
-// adventureHandler /adventure/：登录冒险（LoginAdventureData）数据面。
+// adventureEmptyStateData /adventure/ 的**结构完整空态**。
+//
+// LOGIN350-03 起这只是「未装配轮次配置时的合法回落」，不再是唯一实现：
+// 真实读面/发放见 adventure_wire.go + 0036 迁移。
 //
 // 消费证据：LoginAdventurePage.CheckLoginAdventure（ilspy-cs/LoginAdventurePage.cs:702-753）
 // 请求 `/adventure/` 后 UpdateDataByResponse；若缓存有 LoginAdventureData 则调
@@ -119,35 +125,37 @@ func infosHandler(dep Deps) httpapi.Handler {
 //	... if (!int.TryParse(today_days, out _)) { Log("already shown, skipped"); return; }
 //	windowToBeShown = true; TryShowCachedWindow();
 //
-// `Load` 要求 adventure_info/setting 子对象；缺失即返回 false → **不弹冒险窗**。
+// `Load` 分两步：先 `ParseObj(GetField("adventure_info"), "adventure", …)`（:304）
+// 取记录层，再逐个 ParseInt 必填字段（:233-235）；任一失败即 Load=false →
+// **不弹冒险窗但打一条 `E Unity: Error when parsing LoginAdventureData`**。
 //
-// 本期无登录冒险的日程生产数据（原服日程/奖励表未取证），故返回
-// **结构完整的空态**：顶层给 `adventure_info`/`setting` 空对象与
-// `today_days` 空串，使 Load 的字段存在性满足、而 today_days 解析失败 →
-// 走「already shown, skipped」分支 → 不弹窗。
-//
-// 这与「客户端有显式跳过分支」一致；**不等于**原服字节。契约卡已如实标注。
-func adventureHandler(dep Deps) httpapi.Handler {
-	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
-		c.Decoded = map[string]any{
-			"cn35": true, "uid": req.UserID, "endpoint": "adventure",
-			"mode": "empty_state",
-		}
-		return cn35wire.MarshalJSON(map[string]any{
-			"data": map[string]any{
-				"LoginAdventureData": map[string]any{
-					"adventure_info": map[string]any{},
-					// today_days 空串 → int.TryParse 失败 → 客户端跳过弹窗。
-					"today_days":    "",
-					"server_date_i": 0,
-					"setting": map[string]any{
-						"path": []any{},
-						"days": []any{},
-					},
+// 2026-10-26 实机取证（LOGIN350-03 基线轮，见
+// artifacts/tasks/login350-03-login-adventure/evidence/device-baseline.md）：
+// 历史空态（`adventure_info:{}` 缺 `adventure` 子键）**走的正是 Load 失败分支**，
+// 每次冷启动都留一条 Unity error。故空态改为「Load 可解析 + today_days 非数字」，
+// 落到客户端显式的 `LoginAdventure: already shown, skipped` 分支（:664-668）——
+// 静默跳过、无错误日志（LA-02 要求「空态不报错」）。
+func adventureEmptyStateData(uid string) map[string]any {
+	return map[string]any{
+		"LoginAdventureData": map[string]any{
+			"adventure_info": map[string]any{
+				// 记录层必填：缺 adventure 子键 ⇒ 客户端 Load 失败（上面取证）。
+				"adventure": map[string]any{
+					"adventure_info":   map[string]any{},
+					"begin_date_i":     0,
+					"reward_config_id": 0,
+					"user_id":          AdventureUserIDNum(uid),
 				},
 			},
-		})
-	})
+			// today_days 空串 → int.TryParse 失败 → 客户端"already shown, skipped"。
+			"today_days":    "",
+			"server_date_i": 0,
+			"setting": map[string]any{
+				"path": []any{},
+				"days": []any{},
+			},
+		},
+	}
 }
 
 // chooseAttrPageHandler /gachas/choose_attr_page/：属国（属性）抽选页数据。

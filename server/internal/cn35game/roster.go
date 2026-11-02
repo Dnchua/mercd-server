@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/Dnchua/mercd-server/server/internal/cardcatalog"
 )
@@ -938,9 +937,13 @@ func GachaSeedPools() []GachaPoolDef {
 //   - unit_memorial 无行为数值配置的单位一律不入池（六族素材 + 数值
 //     配置双要件，发布校验同口径拒绝）。
 //
-// wiki_gacha 数组仅历史参考；定权真源是 obtain 文本复核（对应计划
-// §已核对的起点粗筛：钻石 141 = 3★90/4★31/5★20，金币 287 = 1★80/2★88/
-// 3★88/4★31）。返回的成员需经 BuildGachaSnapshot 校验后才可发布。
+// 遵循 open-all 全量开放口径（2026-10-05 数值配置门槛）：所有满足
+// Qualified（六族素材完整）&& Wiki（模板在册）&& MemorialUnitConfigured
+// （unit_memorial 数值在册）的角色按星级开放入池：
+//   - 池 "2"（钻石）：3★–5★（914 名）
+//   - 池 "3"（金币）：1★–4★（1,096 名）
+//
+// 返回的成员需经 BuildGachaSnapshot 校验后才可发布。
 func GachaSeedMembers(m *RosterManifest) map[string][]GachaDraftMember {
 	out := map[string][]GachaDraftMember{"2": nil, "3": nil}
 	for idStr, u := range m.Units {
@@ -957,10 +960,10 @@ func GachaSeedMembers(m *RosterManifest) map[string][]GachaDraftMember {
 		if !MemorialUnitConfigured(id) {
 			continue
 		}
-		if u.Rare >= 3 && u.Rare <= 5 && strings.Contains(u.Obtain, "钻石") {
+		if u.Rare >= 3 && u.Rare <= 5 {
 			out["2"] = append(out["2"], GachaDraftMember{PoolID: "2", UnitID: id, Weight: 1})
 		}
-		if u.Rare >= 1 && u.Rare <= 4 && strings.Contains(u.Obtain, "金币") {
+		if u.Rare >= 1 && u.Rare <= 4 {
 			out["3"] = append(out["3"], GachaDraftMember{PoolID: "3", UnitID: id, Weight: 1})
 		}
 	}

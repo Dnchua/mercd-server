@@ -183,8 +183,8 @@ func TestBattleMonsterDocMemorial(t *testing.T) {
 	if docNum(t, doc, "reach") != docNum(t, entry, "reach") {
 		t.Fatalf("reach=%v want %v（纪念版 reachValue）", doc["reach"], entry["reach"])
 	}
-	if m.MSpd != nil && docNum(t, doc, "speed") != float64(*m.MSpd) {
-		t.Fatalf("speed=%v want %v（wiki mspd 优先）", doc["speed"], *m.MSpd)
+	if docNum(t, doc, "speed") != docNum(t, entry, "speed") {
+		t.Fatalf("speed=%v want %v（纪念版主数据优先）", doc["speed"], entry["speed"])
 	}
 	if docNum(t, doc, "attackable_count") < 1 {
 		t.Fatalf("attackable_count=%v", doc["attackable_count"])
@@ -221,5 +221,57 @@ func TestBattleMonsterDocFullCatalog(t *testing.T) {
 		if docNum(t, doc, "multi_hit_count") < 1 {
 			t.Fatalf("monster %d multi_hit_count=%v", id, doc["multi_hit_count"])
 		}
+	}
+}
+
+// TestMemorialUnitOverrideLayer 纪念服覆盖层：名称/称号/简介/档案/基础数值
+// 命中 unit_text 的 *_override 键时压过国服 catalog（不改 units.json，
+// 以保住 catalog SHA 与历史 grant 配置的可重放性）。
+//
+// 覆盖 1277（P3 边界单位，catalog 名字是日文「フィーユ」→ 汉化「菲优」）。
+func TestMemorialUnitOverrideLayer(t *testing.T) {
+	cat := loadTestCatalog(t)
+	u, err := cat.Unit(1277)
+	if err != nil {
+		t.Fatalf("模板 1277: %v", err)
+	}
+	doc, err := buildUnitDoc(UnitRecord{UnitID: 1277, Level: 1}, u)
+	if err != nil {
+		t.Fatalf("buildUnitDoc: %v", err)
+	}
+	if got := doc["main_name"]; got != "菲优" {
+		t.Fatalf("main_name=%v want 菲优（纪念服汉化覆盖）", got)
+	}
+	if got := doc["prefix_name"]; got != "月露翅之秋壳" {
+		t.Fatalf("prefix_name=%v want 月露翅之秋壳", got)
+	}
+	if got := doc["name"]; got != "[月露翅之秋壳]菲优" {
+		t.Fatalf("name=%v want [月露翅之秋壳]菲优", got)
+	}
+	if _, ok := doc["description"].(string); !ok {
+		t.Fatalf("缺 description（纪念服简介应下发）")
+	}
+}
+
+// TestMemorialUnitNumericOverride 数值覆盖层：152 的 atk 反解为 3900，
+// 使满觉满级终值精确命中纪念服 maxAttack=12840（未覆盖时 11835）。
+func TestMemorialUnitNumericOverride(t *testing.T) {
+	cat := loadTestCatalog(t)
+	u, err := cat.Unit(152)
+	if err != nil {
+		t.Fatalf("模板 152: %v", err)
+	}
+	doc, err := buildUnitDoc(UnitRecord{UnitID: 152, Level: 1}, u)
+	if err != nil {
+		t.Fatalf("buildUnitDoc: %v", err)
+	}
+	if docNum(t, doc, "at_min") != 3900 {
+		t.Fatalf("at_min=%v want 3900（纪念服终值反解）", doc["at_min"])
+	}
+	if docNum(t, doc, "at_15_max") != 12840 {
+		t.Fatalf("at_15_max=%v want 12840（纪念服 maxAttack）", doc["at_15_max"])
+	}
+	if docNum(t, doc, "hp_15_max") != 12078 {
+		t.Fatalf("hp_15_max=%v want 12078（纪念服 maxHp）", doc["hp_15_max"])
 	}
 }
