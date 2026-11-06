@@ -136,13 +136,23 @@ func TestDeckMutationAndInvalidPartyDoNotChargeAP(t *testing.T) {
 	if on["status"] != "success" || on["data"].(map[string]any)["user_decks"] == nil {
 		t.Fatalf("有效 on 响应: %v", on)
 	}
+	// 同队已存在单位挪位到空槽（party 2 slot 1 -> slot 2），随后对调回 slot 1
+	moveOn := gameJSON(t, ts.URL, "/user_decks/on", uidA, skA, s0A, s1A,
+		"party_id=2&party_index=2&unit_id=348", "_method=GET")
+	if moveOn["status"] != "success" {
+		t.Fatalf("同队挪位 on 响应应成功: %v", moveOn)
+	}
+	swapBack := gameJSON(t, ts.URL, "/user_decks/on", uidA, skA, s0A, s1A,
+		"party_id=2&party_index=1&unit_id=348", "_method=GET")
+	if swapBack["status"] != "success" {
+		t.Fatalf("同队挪回 slot 1 应成功: %v", swapBack)
+	}
 	if beforeAP(uidA) != 20 {
 		t.Fatal("编队编辑改动了 AP")
 	}
 	for _, tc := range []struct {
 		name, path, query string
 	}{
-		{"精确重复模板", "/user_decks/on", "party_id=2&party_index=2&unit_id=348"},
 		{"越界槽位", "/user_decks/on", "party_id=2&party_index=5&unit_id=336"},
 		{"伪造队伍 key", "/user_decks/on", "party_id=999&party_index=0&unit_id=336"},
 		{"他人单位", "/user_decks/on", "party_id=2&party_index=2&unit_id=396"},
@@ -172,13 +182,11 @@ func TestDeckMutationAndInvalidPartyDoNotChargeAP(t *testing.T) {
 	if err := st.DB().QueryRow(`SELECT COUNT(*) FROM cn35_battle_sessions WHERE user_id=?`, uidA).Scan(&beforeCount); err != nil {
 		t.Fatal(err)
 	}
-	// 新手保底：001 队全空槽会在编队读取时回填起始五卡 → ordinal 003 已非
-	// 空编队，可正常开战；仅 ordinal 004（不存在编队）必须回 modal。
+	// 玩家已手动卸空 1 号队（ordinal 003）→ 禁用自动回填，保持空编队，
+	// 尝试用空编队 003 或不存在编队 004 出战均须回 modal 且不建会话、不扣 AP。
 	doc := gameJSON(t, ts.URL, "/quests/execute/1.json", uidA, skA, s0A, s1A,
 		"mode=quest&id=1&difficulty_id=normal&party_id=003&unit_ids=336,348", "_method=GET")
-	if doc["quest"] == nil {
-		t.Fatalf("保底回填后 ordinal 003 应可开战: %v", doc)
-	}
+	requireModal(doc, "ordinal 003 emptied party")
 	doc = gameJSON(t, ts.URL, "/quests/execute/1.json", uidA, skA, s0A, s1A,
 		"mode=quest&id=1&difficulty_id=normal&party_id=004&unit_ids=336,348", "_method=GET")
 	requireModal(doc, "ordinal 004 unknown party")
@@ -189,8 +197,7 @@ func TestDeckMutationAndInvalidPartyDoNotChargeAP(t *testing.T) {
 	if err := st.DB().QueryRow(`SELECT COUNT(*) FROM cn35_battle_sessions WHERE user_id=?`, uidA).Scan(&afterCount); err != nil {
 		t.Fatal(err)
 	}
-	// 003 为保底回填后的合法编队会正常建立会话；仅 004 不得建会话。
-	if afterCount != beforeCount+1 {
+	if afterCount != beforeCount {
 		t.Fatalf("无效编队建立了会话: before=%d after=%d", beforeCount, afterCount)
 	}
 }

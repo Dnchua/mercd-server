@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Dnchua/mercd-server/server/internal/cn35game"
@@ -71,9 +72,18 @@ type Store struct {
 	sizeColOnce sync.Once
 	hasSizeCol  bool
 
+	// waitColOnce/hasWaitCol 缓存「0046 同伴 is_waiting 列是否在位」的探测结果
+	// （只读打开旧库时需要退回旧列集，见 unitWaitingColumn）。
+	waitColOnce sync.Once
+	hasWaitCol  bool
+
 	// inflight 写面在途去重表（dedupe.go）。
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
+
+	// tplGen 模板写入代际号：本进程内 cn35_unit_templates 写事务成功提交后
+	// 递增，rosterCatalog 据此重建进程内模板快照（roster.go）。
+	tplGen atomic.Uint64
 }
 
 // Open 打开/升级 CN3.5 运行库；schema 版本不符按迁移器规则失败关闭。

@@ -45,6 +45,7 @@ func itemServer(t *testing.T, stateDir string) (*httptest.Server, *cn35store.Sto
 		Medal:      st,
 		Awaken:     st,
 		DailyShop:  st,
+		Skills:     st,
 		ServerHost: "127.0.0.1:18091",
 		AssetsDir:  filepath.Join("..", "..", "assets", "cn350"),
 	})
@@ -162,6 +163,39 @@ func TestResourceBattleChain(t *testing.T) {
 	hash := bag["user_items_hash"].(map[string]any)
 	if len(hash["2"].([]any)) == 0 {
 		t.Fatalf("user_items_hash.2 应含素材: %v", hash)
+	}
+
+	// 符文本（area 9007 最高档）全链：掉落符文结算回 user_skills=null（对齐原作抓包失效缓存，不覆写全量列表），
+	// 且首包丢失重试（already_received）同样补回 user_skills=null。
+	if _, err := st.DB().Exec(`UPDATE cn35_player_profiles SET max_ap=200,ap=200 WHERE user_id=?`, uid); err != nil {
+		t.Fatal(err)
+	}
+	rquests := docList(t, gameData(t, ts.URL, "/quests?area_id=9007", uid, sk, s0, s1, ""), "quests_9007")
+	runeQID := itoaInt(int(rquests[len(rquests)-1].(map[string]any)["id"].(float64)))
+	rdoc := gameJSON(t, ts.URL, "/quests/execute/"+runeQID+".json", uid, sk, s0, s1,
+		"mode=quest&id="+runeQID+"&party_id=001&unit_ids=336,348", "_method=GET")
+	if rdoc["status"] == "fail" || rdoc["ap_use_url"] == nil {
+		t.Fatalf("execute %s 失败: %v", runeQID, rdoc)
+	}
+	rbid := strings.SplitN(rdoc["ap_use_url"].(string), "bid=", 2)[1]
+	gameJSON(t, ts.URL, "/quests/use_ap", uid, sk, s0, s1, "bid="+rbid, "_method=GET")
+	rres := gameJSON(t, ts.URL, "/quests/result", uid, sk, s0, s1,
+		"bid="+rbid+"&time=30&mc=0", "_method=GET")
+	if rres["status"] != "success" {
+		t.Fatalf("rune result: %v", rres)
+	}
+	rdata := rres["data"].(map[string]any)
+	if v, ok := rdata["user_skills"]; !ok || v != nil {
+		t.Fatalf("符文本掉落结算应下发 user_skills=null 使客户端缓存过期重拉: ok=%v v=%v", ok, v)
+	}
+	rretry := gameJSON(t, ts.URL, "/quests/result", uid, sk, s0, s1,
+		"bid="+rbid+"&time=30&mc=0", "_method=GET")
+	if rretry["status"] != "already_received" {
+		t.Fatalf("符文本重试应回 already_received: %v", rretry)
+	}
+	rretryData := rretry["data"].(map[string]any)
+	if v, ok := rretryData["user_skills"]; !ok || v != nil {
+		t.Fatalf("符文本 already_received 重试应补回 user_skills=null: ok=%v v=%v", ok, v)
 	}
 }
 
@@ -391,4 +425,18 @@ func catUnitRare(t *testing.T, cat *cardcatalog.Catalog, id int) int {
 
 func itoa(i int) string {
 	return string(rune('0' + i))
+}
+
+func itoaInt(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(buf[i:])
 }

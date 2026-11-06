@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"sync"
+	"sync/atomic"
 
 	"github.com/Dnchua/mercd-server/server/internal/cardcatalog"
 )
@@ -817,13 +819,39 @@ type UnitTemplateReader interface {
 	UnitTemplate(unitID int) (*UnitTemplate, bool, error)
 }
 
+// UnitTemplateBulkReader 是 UnitTemplateReader 的可选扩展（cn35store.Store
+// 实现），供 rosterCatalog 建进程内只读快照：
+//   - AllUnitTemplates：一条 SELECT 读出全部模板行；
+//   - UnitTemplateGeneration：本进程内模板写入（后台编辑/导入）成功提交后
+//     递增的代际号。只覆盖同进程写入——另一进程（如 mercdb cn35-roster
+//     import -commit）改同一库后须重启服务才生效（不做跨进程探测）。
+type UnitTemplateBulkReader interface {
+	UnitTemplateReader
+	AllUnitTemplates() ([]*UnitTemplate, error)
+	UnitTemplateGeneration() uint64
+}
+
 // rosterCatalog 把 DB 名册模板叠加到静态 cardcatalog 之上：
 //   - Unit(id)：模板行存在 → 由模板重建（管理员发布值即读面值）；
 //     不存在 → 回退静态 catalog（非抽取旧单位/未导入单位的明示回退策略）。
 //   - 魔宠与元信息/质量报告仍走静态目录（名册治理只管同伴模板）。
+//
+// tpl 实现 UnitTemplateBulkReader 时，模板整表重建为只读快照（原子指针整体
+// 替换，读路径无锁、不查库）；代际号变化后下一次读取重建。返回的 *Unit 为
+// 共享只读对象（与静态 catalog 同一约定），调用方不得修改。
 type rosterCatalog struct {
 	base *cardcatalog.Catalog
 	tpl  UnitTemplateReader
+	bulk UnitTemplateBulkReader // nil = 逐行读（旧行为）
+
+	snap   atomic.Pointer[unitSnapshot]
+	loadMu sync.Mutex // 只串行化重建，不影响已就绪快照的读取
+}
+
+// unitSnapshot 某一代际的模板重建结果（unit_id → 只读 Unit）。
+type unitSnapshot struct {
+	gen   uint64
+	units map[int]*cardcatalog.Unit
 }
 
 // NewRosterCatalog 构建覆盖层；tpl 为 nil 时等价于 base 直读。
@@ -831,12 +859,53 @@ func NewRosterCatalog(base *cardcatalog.Catalog, tpl UnitTemplateReader) UnitCat
 	if base == nil || tpl == nil {
 		return base
 	}
-	return &rosterCatalog{base: base, tpl: tpl}
+	c := &rosterCatalog{base: base, tpl: tpl}
+	c.bulk, _ = tpl.(UnitTemplateBulkReader)
+	return c
+}
+
+// snapshot 返回当前代际的快照；整表读取失败返回 nil（调用方退回逐行读，
+// 下次调用重试）。代际号在 SELECT 之前读取：并发写入提交后代际必然前进，
+// 下一次读取会再重建，不会把旧数据标成新代际。
+func (c *rosterCatalog) snapshot() *unitSnapshot {
+	gen := c.bulk.UnitTemplateGeneration()
+	if s := c.snap.Load(); s != nil && s.gen == gen {
+		return s
+	}
+	c.loadMu.Lock()
+	defer c.loadMu.Unlock()
+	gen = c.bulk.UnitTemplateGeneration()
+	if s := c.snap.Load(); s != nil && s.gen == gen {
+		return s
+	}
+	tpls, err := c.bulk.AllUnitTemplates()
+	if err != nil {
+		return nil
+	}
+	units := make(map[int]*cardcatalog.Unit, len(tpls))
+	for _, t := range tpls {
+		u := UnitFromTemplate(t)
+		u.CountryID = c.base.CountryID(u.Country)
+		units[t.UnitID] = u
+	}
+	s := &unitSnapshot{gen: gen, units: units}
+	c.snap.Store(s)
+	return s
 }
 
 func (c *rosterCatalog) Unit(id int) (*cardcatalog.Unit, error) {
+	if c.bulk != nil {
+		if s := c.snapshot(); s != nil {
+			if u, ok := s.units[id]; ok {
+				return u, nil
+			}
+			return c.base.Unit(id)
+		}
+	}
 	if t, ok, err := c.tpl.UnitTemplate(id); err == nil && ok {
-		return UnitFromTemplate(t), nil
+		u := UnitFromTemplate(t)
+		u.CountryID = c.base.CountryID(u.Country)
+		return u, nil
 	}
 	return c.base.Unit(id)
 }

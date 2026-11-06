@@ -10,6 +10,12 @@ import "errors"
 var (
 	// ErrUnitNotOwned 会话账号未持有该 unit_id（含跨账号请求）。
 	ErrUnitNotOwned = errors.New("cn35game: 目标同伴不在本账号库存")
+	// ErrUnitRoleProtected 队长或助战同伴不可移入待机所。
+	ErrUnitRoleProtected = errors.New("cn35game: 队长或助战同伴不可待机")
+	// ErrUnitAlreadyWaiting 目标同伴已处于待机所。
+	ErrUnitAlreadyWaiting = errors.New("cn35game: 目标同伴已在待机所中")
+	// ErrUnitNotWaiting 目标同伴不在待机所中，不可执行同行召回。
+	ErrUnitNotWaiting = errors.New("cn35game: 目标同伴不在待机所中")
 	// ErrMonsterNotOwned 会话账号未持有该魔宠 uuid（含跨账号请求）。
 	ErrMonsterNotOwned = errors.New("cn35game: 目标魔宠不在本账号库存")
 	// ErrMonsterNotEquipped off 请求命中了未装备的魔宠。
@@ -38,6 +44,11 @@ type UnitOpsStore interface {
 	SetHelperUnitID(userID string, unitID int) error
 	// SetUnitProtected 写 cn35_player_units.protected。
 	SetUnitProtected(userID string, unitID int, protected bool) error
+	// WaitUnits 批量将同行同伴移入待机所（/albums/wait）：
+	// 同事务校验非队长/助战、归属且当前同行，自动卸下符文/魔宠并移出编队。
+	WaitUnits(userID string, unitIDs []int) error
+	// BackUnits 批量将待机所同伴召回同行列表（/albums/back）。
+	BackUnits(userID string, unitIDs []int) error
 }
 
 // MonsterOpsStore 魔宠写面。装备关系在 monsters.unit_id 与

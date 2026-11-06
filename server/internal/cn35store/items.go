@@ -453,7 +453,7 @@ func (s *Store) awakenUnit(userID string, unitID, rare, maxDup, count int) (*cn3
 	err := s.withTx(func(tx *sql.Tx) error {
 		var dup int
 		err := tx.QueryRow(`SELECT duplicated_count FROM cn35_player_units
-			WHERE user_id=? AND unit_id=?`, userID, unitID).Scan(&dup)
+			WHERE user_id=? AND unit_id=? AND is_waiting=0`, userID, unitID).Scan(&dup)
 		if errors.Is(err, sql.ErrNoRows) {
 			return cn35game.ErrAwakeUnitNotFound
 		}
@@ -523,6 +523,27 @@ func (s *Store) useItem(userID string, contentID, count int) (*cn35game.UseItemR
 	}
 	res := &cn35game.UseItemResult{Count: count}
 	err := s.withTx(func(tx *sql.Tx) error {
+		now := nowUTC()
+		if contentID == 203 {
+			// NoApModal 钻石恢复 AP：扣除 count 枚钻石并将 AP 恢复至上限。
+			up, err := tx.Exec(`UPDATE cn35_player_balances
+				SET amount=amount-?,updated_at=?
+				WHERE user_id=? AND currency='coin' AND amount>=?`,
+				count, now, userID, count)
+			if err != nil {
+				return err
+			}
+			if n, _ := up.RowsAffected(); n != 1 {
+				return cn35game.ErrItemInsufficient
+			}
+			if _, err := tx.Exec(`UPDATE cn35_player_profiles
+				SET ap=MAX(ap, max_ap),ap_updated_at=?,updated_at=? WHERE user_id=?`,
+				now, now, userID); err != nil {
+				return err
+			}
+			res.ItemKey = "coin_ap"
+			return nil
+		}
 		var itemKey, kind string
 		err := tx.QueryRow(`SELECT item_key,kind FROM cn35_item_catalog
 			WHERE content_id=? AND enabled=1`, contentID).Scan(&itemKey, &kind)
@@ -535,12 +556,11 @@ func (s *Store) useItem(userID string, contentID, count int) (*cn35game.UseItemR
 		if kind != "consumable" {
 			return cn35game.ErrItemNotUsable
 		}
-		now := nowUTC()
 		switch itemKey {
 		case "ap_potion":
-			// AP 回满：锚点重置为 now，恢复计时从满 AP 重新开始。
+			// AP 回满（若已溢出则保持原值）：锚点重置为 now，恢复计时从满 AP 重新开始。
 			if _, err := tx.Exec(`UPDATE cn35_player_profiles
-				SET ap=max_ap,ap_updated_at=?,updated_at=? WHERE user_id=?`,
+				SET ap=MAX(ap, max_ap),ap_updated_at=?,updated_at=? WHERE user_id=?`,
 				now, now, userID); err != nil {
 				return err
 			}

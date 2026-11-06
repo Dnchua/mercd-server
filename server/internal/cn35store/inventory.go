@@ -20,9 +20,14 @@ var ErrGrantKeyConflict = errors.New("cn35store: 发放台账键已存在")
 // 编译期断言：Store 满足 07 消费的库存读取面。
 var _ cn35game.InventoryStore = (*Store)(nil)
 
-// Units 实现 cn35game.InventoryStore：按 unit_id 升序返回账号单位库存。
+// Units 实现 cn35game.InventoryStore：按 unit_id 升序返回账号单位库存（含同行与待机所）。
 func (s *Store) Units(userID string) ([]cn35game.UnitRecord, error) {
-	rows, err := s.db.Query(`SELECT unit_id,level,duplicated_count,protected,newcomer,monster_uuid
+	withWait := s.unitWaitingColumn()
+	cols := `unit_id,level,duplicated_count,protected,newcomer,monster_uuid`
+	if withWait {
+		cols += `,is_waiting`
+	}
+	rows, err := s.db.Query(`SELECT `+cols+`
 		FROM cn35_player_units WHERE user_id=? ORDER BY unit_id`, userID)
 	if err != nil {
 		return nil, err
@@ -31,15 +36,32 @@ func (s *Store) Units(userID string) ([]cn35game.UnitRecord, error) {
 	out := []cn35game.UnitRecord{}
 	for rows.Next() {
 		var r cn35game.UnitRecord
-		var prot, newcom int
-		if err := rows.Scan(&r.UnitID, &r.Level, &r.DuplicatedCount, &prot, &newcom, &r.MonsterUUID); err != nil {
+		var prot, newcom, wait int
+		dest := []any{&r.UnitID, &r.Level, &r.DuplicatedCount, &prot, &newcom, &r.MonsterUUID}
+		if withWait {
+			dest = append(dest, &wait)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 		r.Protected = prot != 0
 		r.Newcomer = newcom != 0
+		r.Waiting = wait != 0
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// unitWaitingColumn 检测 0046 的 is_waiting 列是否在位（结果缓存一次）。
+// Open 路径经 Migrate 到最新 → 恒 true；OpenReadOnly 打开旧库 → false。
+func (s *Store) unitWaitingColumn() bool {
+	s.waitColOnce.Do(func() {
+		var n int
+		err := s.db.QueryRow(
+			`SELECT count(*) FROM pragma_table_info('cn35_player_units') WHERE name='is_waiting'`).Scan(&n)
+		s.hasWaitCol = err == nil && n == 1
+	})
+	return s.hasWaitCol
 }
 
 // Monsters 实现 cn35game.InventoryStore：按 uuid 升序返回账号魔宠库存。

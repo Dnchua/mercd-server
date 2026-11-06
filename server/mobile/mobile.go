@@ -17,6 +17,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -44,6 +47,11 @@ func Start(stateDir, assetsDir, cardsDir string, port int) error {
 	if port <= 0 || port > 65535 {
 		return fmt.Errorf("mobile: 非法端口 %d", port)
 	}
+	_ = os.MkdirAll(stateDir, 0700)
+	_ = os.Setenv("TMPDIR", stateDir)
+	if runtime.GOARCH == "arm" && runtime.GOMAXPROCS(0) > 2 {
+		runtime.GOMAXPROCS(2)
+	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	cfg := config.CN35Config{
@@ -52,10 +60,18 @@ func Start(stateDir, assetsDir, cardsDir string, port int) error {
 		AssetsDir:  assetsDir,
 		CardsDir:   cardsDir,
 		StateDir:   stateDir,
+		// 移动端默认开启单机 NPC 公会域，与 BindCN35 默认口径保持一致。
+		GuildSolo:           true,
+		GuildSoloCandidates: 3,
+		GuildSoloOpponents:  3,
+		GuildSoloMaxGuilds:  24,
 		// 移动端默认关取证落盘与周期扫描、不开管理面（无令牌即 503）。
 		RequestLog:       "",
 		EventLog:         "",
 		RemoteAssetsScan: 0,
+		// 单机资源由 Android 预置客户端 files/；隔离旧 state/remote_assets，
+		// 防止历史资源叠加覆盖随包 MD5 清单。此目录只作空扫描占位。
+		RemoteAssetsDir: filepath.Join(assetsDir, "offline-empty"),
 	}
 	if err := cfg.ValidateCN35(); err != nil {
 		return err

@@ -62,6 +62,8 @@ func presentReceiveHandler(dep Deps) httpapi.Handler {
 			case errors.Is(rerr, ErrPresentExpired):
 				return cn35wire.MarshalJSON(trainingError(
 					"无法领取", "该礼物已过领取期限。"))
+			case errors.Is(rerr, ErrPresentUnitCap):
+				return cn35wire.MarshalJSON(trainingError("无法领取", "同伴觉醒次数将超过上限，礼物保留在礼物箱中。"))
 			case errors.Is(rerr, ErrPresentUnsupported):
 				return cn35wire.MarshalJSON(trainingError(
 					"无法领取", "该类型礼物暂未开放领取。"))
@@ -84,6 +86,12 @@ func presentReceiveHandler(dep Deps) httpapi.Handler {
 		rewards := make([]any, 0, len(res.Granted))
 		for _, g := range res.Granted {
 			rewards = append(rewards, presentRewardDoc(dep, g))
+			switch g.ContentType {
+			case "monster":
+				data["monster_albums"] = nil
+			case "skill":
+				data["user_skills"] = nil
+			}
 		}
 		c.Decoded["granted"] = len(rewards)
 		return cn35wire.MarshalJSON(map[string]any{

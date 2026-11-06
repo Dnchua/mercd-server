@@ -10,6 +10,9 @@
 // 语义：import 默认预览（整包回滚），-commit 才落库；seed 只在无任何池定义时
 // 执行（名册导入 + 双池定义 + 成员启用 + 成员表 + 发布一条龙）；publish/
 // activate 等价于管理面同名操作。全部写操作落 cn35_admin_audit。
+//
+// 模板缓存：mercd35 把 cn35_unit_templates 缓存在进程内（只感知本进程写入）。
+// 服务运行中用 import -commit / seed 改了同一库的模板后，须重启 mercd35 生效。
 package main
 
 import (
@@ -75,6 +78,8 @@ func cn35Roster(args []string) error {
 		fmt.Println(string(out))
 		if !*commit {
 			fmt.Println("（预览模式：以上差异未落库；加 -commit 写入）")
+		} else if res.TemplateUpserts > 0 {
+			fmt.Println("注意：mercd35 把同伴模板缓存在进程内，运行中的服务须重启后才读到本次模板变更")
 		}
 		return nil
 

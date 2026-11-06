@@ -466,6 +466,24 @@ func TestBuiltinTest001AccountSeededByMigration(t *testing.T) {
 	if err != nil || len(units) != 1251 {
 		t.Fatalf("test001 units=%d err=%v, want 1251", len(units), err)
 	}
+	activeCount, waitingCount := 0, 0
+	activeSet := map[int]bool{}
+	for _, u := range units {
+		if u.Waiting {
+			waitingCount++
+		} else {
+			activeCount++
+			activeSet[u.UnitID] = true
+		}
+	}
+	if activeCount != 150 || waitingCount != 1101 {
+		t.Fatalf("test001 active=%d waiting=%d, want 150/1101", activeCount, waitingCount)
+	}
+	for _, deckUnit := range []int{348, 336, 156, 296, 375} {
+		if !activeSet[deckUnit] {
+			t.Fatalf("test001 deck unit %d should be active (is_waiting=0)", deckUnit)
+		}
+	}
 	monsters, err := s.Monsters(uid)
 	if err != nil || len(monsters) != 235 {
 		t.Fatalf("test001 monsters=%d err=%v, want 235", len(monsters), err)

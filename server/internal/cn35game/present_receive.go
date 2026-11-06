@@ -26,6 +26,7 @@ var (
 	ErrPresentExpired = errors.New("cn35game: 礼物已过期")
 	// ErrPresentUnsupported content_type 无持久化实现或内容模板缺失。
 	ErrPresentUnsupported = errors.New("cn35game: 礼物类型未支持")
+	ErrPresentUnitCap     = errors.New("cn35game: 礼物同伴觉醒超过上限")
 )
 
 // PresentGrant 一条实际发放的礼物内容（响应 rewards 行的数据源）。

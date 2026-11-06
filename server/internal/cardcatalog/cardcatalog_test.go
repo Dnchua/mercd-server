@@ -94,8 +94,7 @@ func TestLoadRealSnapshot(t *testing.T) {
 	}
 }
 
-// TestCountryIDDeterministic CountryID 派生规则：同国同 id、异国异 id、
-// 按「持有该国的最小 unit id」升序从 1 连续编号、无国家保持 0。
+// TestCountryIDDeterministic：未知国家使用不与客户端筛选值冲突的重建 ID。
 func TestCountryIDDeterministic(t *testing.T) {
 	dir := writeDir(t,
 		`[{"id":5,"name":"B1","rare":1,"element":1,"weapon":1,"type":1,"life":1,"atk":1,"aarea":1,"country":"B国"},
@@ -115,24 +114,15 @@ func TestCountryIDDeterministic(t *testing.T) {
 		}
 		return u.CountryID
 	}
-	// A国 最小 unit id=3 → 编号 1；B国 最小=5 → 编号 2（按最小 id 升序）。
-	if cidOf(3) != 1 || cidOf(7) != 1 {
-		t.Fatalf("同国应同 id=1: %d/%d", cidOf(3), cidOf(7))
+	if cidOf(3) != 200000 || cidOf(7) != 200000 {
+		t.Fatalf("同国应同 id=200000: %d/%d", cidOf(3), cidOf(7))
 	}
-	if cidOf(5) != 2 || cidOf(12) != 2 {
-		t.Fatalf("B国应同 id=2: %d/%d", cidOf(5), cidOf(12))
+	if cidOf(5) != 200001 || cidOf(12) != 200001 {
+		t.Fatalf("B国应同 id=200001: %d/%d", cidOf(5), cidOf(12))
 	}
 	if cidOf(9) != 0 {
 		t.Fatalf("无国家应为 0: %d", cidOf(9))
 	}
-	// 编号连续性：1..N 无空洞（本例恰 2 国 → 集合 {1,2}）。
-	seen := map[int]bool{cidOf(3): true, cidOf(5): true}
-	for i := 1; i <= len(seen); i++ {
-		if !seen[i] {
-			t.Fatalf("编号应从 1 连续: %v", seen)
-		}
-	}
-
 	// 真实快照：152（沙漠之国）CountryID>0，且与同国单位同值。
 	if _, err := os.Stat(realDir); err != nil {
 		t.Skipf("cards 快照不可用: %v", err)
@@ -145,7 +135,7 @@ func TestCountryIDDeterministic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u152.Country != "沙漠之国" || u152.CountryID <= 0 {
+	if u152.Country != "沙漠之国" || u152.CountryID != 10 {
 		t.Fatalf("unit 152 CountryID: %+v", u152)
 	}
 }

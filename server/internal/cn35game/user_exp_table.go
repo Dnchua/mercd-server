@@ -249,15 +249,22 @@ func UserNeedExpCapped(level int) int {
 	return UserNeedExp(level)
 }
 
-// UserExpWindow 结算条等级需求窗口（SWFQuestClear 按 needExpTable[expIndex]
-// 消费：UpdateGauge 每越一级 expIndex++，下一帧再读 needExpTable[expIndex]）。
-// 仅发两档时单场跨越 ≥2 级（低等级需求 100/级）即越界抛
-// ArgumentOutOfRangeException，结算屏经验计数动画冻结在中途——2026-10-13
-// 实机复现（hard quest1 +200exp，1 级起跨 2 级，计数停在 154）。
-// 因此下发本级起 userExpWindowSize 档；低等级段累计需求远大于任何单场
-// 结算经验，窗口长度足够覆盖跳级。表尾截到末档非 0 需求（除法分母），
-// 满级侧按 UserNeedExpCapped 回退。
-const userExpWindowSize = 32
+// UserExpWindow 默认结算条等级需求窗口（无经验增量上下文时下发 2 档
+// [need(level), need(level+1)]，与生产抓包 serve_quest_execute_1.json 的
+// [100,100] 一致；表尾截到末档非 0 需求，满级侧按 UserNeedExpCapped 回退）。
+//
+// 注意：客户端 SWFQuestClear/SWFAutoQuestClear 在玩家点击屏幕快进经验动画
+// （canceled=true）且发生升级时，会按 needExpTable.Count-1 求和前 N-1 档并作为
+// 本场升达等级偏移：
+//
+//	for (int i = 0; i < needExpTable.Count - 1; i++) _totalNeededExp += needExpTable[i];
+//	currentGaugeExp = _resultExp - _totalNeededExp;
+//	expIndex = needExpTable.Count - 1;
+//
+// 若固定下发 32 档，升 1 级快进时会把后续 31 级需求全部扣减，导致 currentGaugeExp
+// 变为巨额负数（如 17 级升 18 级出现 -1,868%）。战斗 execute 下发须调用
+// UserExpWindowForGain 按本场实际跨越级数动态裁剪窗口长度。
+const userExpWindowSize = 2
 
 func UserExpWindow(level int) []int64 {
 	if level < 1 {
@@ -274,6 +281,27 @@ func UserExpWindow(level int) []int64 {
 	out := make([]int64, 0, end-(level-1))
 	for i := level - 1; i < end; i++ {
 		out = append(out, int64(userNeedExpTable[i]))
+	}
+	return out
+}
+
+// UserExpWindowForGain 按本场战斗实际经验增益生成结算条窗口：
+//   - 未升级（newLevel <= level）：同 UserExpWindow(level)；
+//   - 升级 k = newLevel - level 级（k >= 1）：精确返回 k+1 档
+//     [UserNeedExpCapped(level), ..., UserNeedExpCapped(newLevel)]，使客户端
+//     完整播放动画（expIndex 逐级递增到 k）与点击屏幕快进（前 k 档求和扣减、
+//     expIndex = Count-1 = k）两条路径的进度百分比与升达等级完全一致。
+func UserExpWindowForGain(level, exp, gain int) []int64 {
+	if level < 1 {
+		level = 1
+	}
+	newLevel, _ := ApplyUserExp(level, exp, gain)
+	if newLevel <= level {
+		return UserExpWindow(level)
+	}
+	out := make([]int64, 0, newLevel-level+1)
+	for lv := level; lv <= newLevel; lv++ {
+		out = append(out, int64(UserNeedExpCapped(lv)))
 	}
 	return out
 }
@@ -297,7 +325,7 @@ func ApplyUserExp(level, exp, gain int) (int, int) {
 }
 
 // UserMaxAP 玩家 AP 上限公式：max_ap = level + 19（用户给定口径 2026-10-01；
-// 与建号种子 1 级 max_ap=20 一致）。升级时 AP 补满至该上限。
+// 与建号种子 1 级 max_ap=20 一致）。升级时 AP 叠加新等级完整上限（允许溢出）。
 func UserMaxAP(level int) int {
 	return level + 19
 }

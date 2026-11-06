@@ -124,6 +124,7 @@ func writeBackData(dep Deps, c *httpapi.Ctx, userID string) (map[string]any, err
 	numericFieldsToNumber(snap.User, "leader_unit_id", "helper_unit_id")
 	data["user"] = snap.User
 	data["user_coin"] = snap.UserCoin
+	data["albums"] = nil
 	// ITEM350-13：写面回推背包最新投影，领取礼物/物品操作后客户端
 	// 返回背包即读到最新 user_items_hash。
 	if dep.Items != nil {

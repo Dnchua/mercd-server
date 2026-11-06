@@ -408,6 +408,12 @@ func TestSigninListAndClaim(t *testing.T) {
 	if got := springUser(t, recv)["medal"]; got != float64(25) {
 		t.Fatalf("签到后徽章 = %v, want 25", got)
 	}
+	if v, ok := recv["user_items"]; !ok || v != nil {
+		t.Fatalf("素材日签到应下发 user_items=null 失效道具缓存: ok=%v v=%v", ok, v)
+	}
+	if v, ok := recv["user_items_hash"]; !ok || v != nil {
+		t.Fatalf("素材日签到应下发 user_items_hash=null 失效道具分类缓存: ok=%v v=%v", ok, v)
+	}
 	var n int
 	if err := st.DB().QueryRow(`SELECT count(*) FROM cn35_signin_claims
 		WHERE user_id=? AND month_key=?`, uid, wantMonth).Scan(&n); err != nil {

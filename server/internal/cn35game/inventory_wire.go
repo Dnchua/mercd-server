@@ -10,8 +10,7 @@
 //   - country_id 必须下发 JSON NUMBER：客户端 Unit.CalcCountrySpBonusRate
 //     以 i() 读 country_id 统计同国人数加成初始 SP（i() 对 STRING 恒 0）；
 //     Enum(key,id) 做 id→name 时两侧经 s() 比较，数值 id 亦可命中。
-//     catalog 无官方国家 id 表，CountryID 由 cardcatalog.Load 按「持有
-//     该国的最小 unit id」确定性编号，同包下发 {id:数值,name:中文名} 枚举行。
+//     已知国家采用客户端筛选配置的 ID，其他国家为重建值；同包下发枚举。
 //   - sex_id 仅经 cache.Enum 做 id→name：以 gender 数字串为 id 下发，
 //     同包附 sex 枚举行。
 //   - cost=100*rare【推断·重建策略】：生产样本 ★5 单位 152 cost=500
@@ -380,7 +379,7 @@ func buildUnitDoc(rec UnitRecord, u *cardcatalog.Unit) (map[string]any, error) {
 	if n, ok := growthTypeName[growthType]; ok {
 		doc["hp_growth_type_name"] = n
 	}
-	if u.Country != "" {
+	if u.Country != "" && u.CountryID > 0 {
 		// country_id 发 NUMBER（同国 SP 加成按 i() 计数，STRING 恒 0）；
 		// 显示名经同包 country 枚举行 {id:数值,name:中文名} 命中。
 		doc["country_id"] = u.CountryID
@@ -480,6 +479,27 @@ func unitInstanceUUID(unitID int) string {
 //   - `scale_limit`/`is_rare` 未证（NULL）时**省略键**，不填 0/false 伪造。
 //   - 客户端消费：Monster.GetScaleCategory（scale/is_rare/scale_limit/real_scale）、
 //     MonsterPowerupModal.InitDisplay（hp/seed_at）、UpdateLabel（base_hp/base_seed_at）。
+// MonsterBatch 返回魔宠的同批排重标记（对齐国服 2017-11 抓包 guilds_monsters.json / preset_data.json）：
+//   - 普通魔宠返回 -1（客户端 checkSelectMonsterLimit 对 batch < 0 直接放行，允许防卫槽同时配置不同普通魔宠）；
+//   - 五系融合培育稀有魔宠（培育方式：X之蛋+Y，id 100005..100045）按系列返回固定非负批次号，
+//     客户端 GuildMonsterButtonsListComponent / GuildDeckButtonsListComponent 据此拦截同系列多只上阵（「不能设定 两样的魔宠」）。
+func MonsterBatch(monsterID int) int {
+	switch {
+	case monsterID >= 100005 && monsterID <= 100008: // 摩布拉（水之蛋+飞拉）
+		return 100
+	case monsterID >= 100009 && monsterID <= 100012: // 赫黎安提斯（风之蛋+皮卡）
+		return 2
+	case monsterID >= 100018 && monsterID <= 100021: // 洛菲阿斯（暗之蛋+司坎德）
+		return 3
+	case monsterID >= 100038 && monsterID <= 100041: // 黛尼斯托（火之蛋+诺滋风）
+		return 1
+	case monsterID >= 100042 && monsterID <= 100045: // 梅赫莲恩（光之蛋+针锋）
+		return 4
+	default:
+		return -1
+	}
+}
+
 func buildMonsterDoc(rec MonsterRecord, m *cardcatalog.Monster) (map[string]any, error) {
 	// 有效 Size：展示用与推进用分别回退，最后落到显式降级值 1.000。
 	// 实机证据（2026-09-30）：客户端 Document.dec/f 按数值解析，字符串态
@@ -491,6 +511,11 @@ func buildMonsterDoc(rec MonsterRecord, m *cardcatalog.Monster) (map[string]any,
 	_, progScale, err := effectiveScale(rec.RealScale, rec.Scale)
 	if err != nil {
 		return nil, fmt.Errorf("cn35 魔宠 %s real_scale 非法: %w", rec.UUID, err)
+	}
+	batch := MonsterBatch(rec.MonsterID)
+	formulaID := 0
+	if batch >= 0 {
+		formulaID = 1
 	}
 	doc := map[string]any{
 		"uuid":             rec.UUID,
@@ -508,8 +533,8 @@ func buildMonsterDoc(rec MonsterRecord, m *cardcatalog.Monster) (map[string]any,
 		"skin_id":          m.Skin,
 		"type_id":          m.Skin,
 		"category_str":     "普通",
-		"batch":            1,
-		"formula_id":       1,
+		"batch":            batch,
+		"formula_id":       formulaID,
 		"hardness_id":      2,
 		"price":            m.Rare * 100,
 		"skill_sort_order": 0,
@@ -778,13 +803,16 @@ func setRate(doc map[string]any, key string, v *float64) {
 // 的数值 CountryID、name=中文名，与 country_id 的 NUMBER 下发配对；
 // 客户端 Enum 经 s() 两侧比较命中）/sex（id=gender 数字串）。
 func enumDocs(units []UnitRecord, cat UnitCatalog) map[string]any {
-	countryIDs := map[string]int{} // 中文名 → CountryID
+	countryIDs := map[int]string{} // CountryID → 中文名
 	sexIDs := map[int]bool{}
 	weapons := map[string]bool{}
 	for _, r := range units {
 		if u, err := cat.Unit(r.UnitID); err == nil {
-			if u.Country != "" {
-				countryIDs[u.Country] = u.CountryID
+			if u.Country != "" && u.CountryID > 0 {
+				name := cardcatalog.CountryDisplayName(u.CountryID, u.Country)
+				if existing, ok := countryIDs[u.CountryID]; !ok || name < existing {
+					countryIDs[u.CountryID] = name
+				}
 			}
 			ut := memorialUnitText(u.ID)
 			if v, ok := ut["sex_id"].(float64); ok && v > 0 {
@@ -804,7 +832,7 @@ func enumDocs(units []UnitRecord, cat UnitCatalog) map[string]any {
 		name string
 	}
 	rows := make([]countryRow, 0, len(countryIDs))
-	for name, id := range countryIDs {
+	for id, name := range countryIDs {
 		rows = append(rows, countryRow{id, name})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].id < rows[j].id })
@@ -863,6 +891,13 @@ func inventoryDataFor(dep Deps, c *httpapi.Ctx, userID string) (map[string]any, 
 	if err != nil {
 		return nil, fmt.Errorf("cn35 库存单位读取失败: %w", err)
 	}
+	activeRecs := make([]UnitRecord, 0, len(urecs))
+	for _, r := range urecs {
+		if r.Waiting {
+			continue
+		}
+		activeRecs = append(activeRecs, r)
+	}
 	mrecs, err := dep.Inventory.Monsters(userID)
 	if err != nil {
 		return nil, fmt.Errorf("cn35 库存魔宠读取失败: %w", err)
@@ -890,7 +925,7 @@ func inventoryDataFor(dep Deps, c *httpapi.Ctx, userID string) (map[string]any, 
 		monsterByUUID[r.UUID] = mdoc
 	}
 	units := []any{}
-	for _, r := range urecs {
+	for _, r := range activeRecs {
 		u, uerr := dep.Catalog.Unit(r.UnitID)
 		if uerr != nil {
 			return nil, fmt.Errorf("cn35 库存单位模板缺失 unit_id=%d: %w", r.UnitID, uerr)
@@ -909,7 +944,7 @@ func inventoryDataFor(dep Deps, c *httpapi.Ctx, userID string) (map[string]any, 
 		units = append(units, udoc)
 	}
 	data := map[string]any{"user_units": units, "user_monsters": monsters}
-	for k, v := range enumDocs(urecs, dep.Catalog) {
+	for k, v := range enumDocs(activeRecs, dep.Catalog) {
 		data[k] = v
 	}
 	c.Decoded = map[string]any{

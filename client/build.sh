@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 # CLIENT_SOURCE_DIR：android-bootstrap/build.sh 的整包 staging 树
-# （decoded-single，remote_assets 已并入 assets/unity）时指向该目录。
+# （decoded-single，资源随包并于首启预置 files/）时指向该目录。
 source_dir="$(cd "$script_dir/.." && pwd)/${CLIENT_SOURCE_DIR:-client/decoded}"
 source_dir="$(cd "$source_dir" 2>/dev/null && pwd || printf '%s' "$source_dir")"
 output_dir="${CLIENT_OUTPUT_DIR:-$repo_root/output/rebuilt}"

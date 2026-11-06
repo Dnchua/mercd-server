@@ -45,6 +45,8 @@ func battleServerSeed(t *testing.T, stateDir string, randSeed int64) (*httptest.
 		Decks:      st,
 		Quests:     st,
 		Battles:    st,
+		Items:      st,
+		ItemUse:    st,
 		Catalog:    cat,
 		ServerHost: "127.0.0.1:18091",
 		AssetsDir:  filepath.Join("..", "..", "assets", "cn350"),
@@ -345,12 +347,43 @@ func TestExecuteValidationModals(t *testing.T) {
 	if validWithForgedInventory["quest"] == nil {
 		t.Fatalf("execute 不应使用客户端全库存 unit_ids 代替存储队伍: %v", validWithForgedInventory)
 	}
-	// AP 不足（unit_ids 全库存合法，AP=1<2）。
+	// AP 不足（unit_ids 全库存合法，AP=1<5）：应回 modal.type=="no_ap"，并支持使用元气之水恢复 AP 后立即开战。
+	if _, err := st.DB().Exec(`INSERT INTO cn35_player_items
+		(user_id,item_key,quantity,updated_at) VALUES (?,'ap_potion',2,'2026-11-06T00:00:00Z')
+		ON CONFLICT(user_id,item_key) DO UPDATE SET quantity=2`, uid); err != nil {
+		t.Fatal(err)
+	}
 	setAPNow(t, st, uid, 1)
 	doc := gameJSON(t, ts.URL, "/quests/execute/1.json", uid, sk, s0, s1,
 		"mode=quest&id=1&difficulty_id=normal&party_id=001", "_method=GET")
-	if doc["modal"] == nil {
-		t.Fatalf("AP 不足应回 modal: %v", doc)
+	modal, ok := doc["modal"].(map[string]any)
+	if !ok || modal["type"] != "no_ap" {
+		t.Fatalf("AP 不足应回 type=no_ap modal: %v", doc)
+	}
+	noAP, ok := modal["no_ap"].(map[string]any)
+	if !ok {
+		t.Fatalf("no_ap 子文档缺失: %v", modal)
+	}
+	if noAP["item"] != float64(2) || noAP["from_message"] != false {
+		t.Fatalf("no_ap 数量或标志错误: %v", noAP)
+	}
+	urlDoc, ok := noAP["url"].(map[string]any)
+	if !ok || urlDoc["item"] != "/user_items/use/?id=201&count=1" || urlDoc["coin"] != "/user_items/use/?id=coin_ap&count=1" {
+		t.Fatalf("no_ap.url 错误: %v", noAP)
+	}
+	// 点击“使用元气之水”请求 url.item → 扣 1 瓶元气之水、AP 恢复至 20 → 再次 execute 成功开战。
+	useRes := gameJSON(t, ts.URL, "/user_items/use/", uid, sk, s0, s1,
+		"id=201&count=1", "_method=GET")
+	if useRes["status"] != "success" {
+		t.Fatalf("使用元气之水失败: %v", useRes)
+	}
+	if ap := useRes["data"].(map[string]any)["user"].(map[string]any)["ap"].(float64); ap != 20 {
+		t.Fatalf("使用元气之水后 AP 应为 20: %v", ap)
+	}
+	docAfterHeal := gameJSON(t, ts.URL, "/quests/execute/1.json", uid, sk, s0, s1,
+		"mode=quest&id=1&difficulty_id=normal&party_id=001", "_method=GET")
+	if docAfterHeal["quest"] == nil {
+		t.Fatalf("恢复 AP 后 execute 应成功: %v", docAfterHeal)
 	}
 }
 
@@ -410,9 +443,9 @@ func TestBattleChainWire(t *testing.T) {
 	}
 	data := res["data"].(map[string]any)
 	u := data["user"].(map[string]any)
-	// LOGIN350-02 起升级 AP 叠加增量（不再补满）：战斗中先扣 5 AP → 15，
-	// 本次结算 exp 50 → level2（max_ap 21，增量 +1）→ ap=16。
-	if u["quest_id"].(float64) != 2 || u["ap"].(float64) != 16 {
+	// 升级 AP 叠加新等级完整上限（允许溢出）：战斗中先扣 5 AP → 15，
+	// 本次结算 exp 50 → level2（max_ap 21，叠加 +21）→ ap=36。
+	if u["quest_id"].(float64) != 2 || u["ap"].(float64) != 36 {
 		t.Fatalf("结算后 user 状态: %v", u)
 	}
 	q1list := data["quests_1"].([]any)
@@ -545,9 +578,26 @@ func TestStorySeedDropAndBackground(t *testing.T) {
 	if mn != 1 || mid != 14 {
 		t.Fatalf("掉落实例应入账魔宠14: count=%d id=%d", mn, mid)
 	}
-	// user_monsters 即时回推（客户端魔宠面板不重启可见）。
-	if _, ok := res["data"].(map[string]any)["user_monsters"]; !ok {
-		t.Fatalf("掉落结算应回推 user_monsters: %v", res["data"])
+	// user_monsters 即时回推（客户端魔宠面板不重启可见），monster_albums 置 nil 使图鉴缓存失效。
+	resData := res["data"].(map[string]any)
+	if _, ok := resData["user_monsters"]; !ok {
+		t.Fatalf("掉落结算应回推 user_monsters: %v", resData)
+	}
+	if v, ok := resData["monster_albums"]; !ok || v != nil {
+		t.Fatalf("掉落魔宠应下发 monster_albums=null 失效图鉴缓存: ok=%v v=%v", ok, v)
+	}
+	// 首包丢失重试（already_received）仍须补回 user_monsters 与 monster_albums=null。
+	retry := gameJSON(t, ts.URL, "/quests/result", uid, sk, s0, s1,
+		"bid="+bid+"&time=99&mc=0", "_method=GET")
+	if retry["status"] != "already_received" {
+		t.Fatalf("重试应回 already_received: %v", retry)
+	}
+	retryData := retry["data"].(map[string]any)
+	if _, ok := retryData["user_monsters"]; !ok {
+		t.Fatalf("already_received 重试应补回 user_monsters: %v", retryData)
+	}
+	if v, ok := retryData["monster_albums"]; !ok || v != nil {
+		t.Fatalf("already_received 重试应补回 monster_albums=null: ok=%v v=%v", ok, v)
 	}
 }
 
@@ -666,8 +716,8 @@ func TestBattleRestartWire(t *testing.T) {
 		t.Fatalf("重启后结算: %v", res)
 	}
 	u := res["data"].(map[string]any)["user"].(map[string]any)
-	// LOGIN350-02 起升级 AP 叠加增量：重启后结算同样落到 level2 → ap=16。
-	if u["quest_id"].(float64) != 2 || u["ap"].(float64) != 16 {
+	// 升级 AP 叠加新等级完整上限（允许溢出）：重启后结算同样落到 level2 → ap=36。
+	if u["quest_id"].(float64) != 2 || u["ap"].(float64) != 36 {
 		t.Fatalf("重启后结算状态: %v", u)
 	}
 	res2 := gameJSON(t, ts2.URL, "/quests/result", uid, sk, s0, s1, "bid="+bid+"&time=30&mc=0", "_method=GET")

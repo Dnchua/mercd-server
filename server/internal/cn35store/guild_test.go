@@ -228,11 +228,23 @@ func TestGuildDefenseAndInvest(t *testing.T) {
 		t.Fatalf("未入会先拒绝: %v", err)
 	}
 	slots, _ := s.DefenseOf(u)
-	if len(slots) != 1 || slots[0].MonsterUUID != "mon-aaa" {
+	if len(slots) != 1 || slots[0].MonsterUUID != "mon-aaa" || slots[0].Batch != -1 {
 		t.Fatalf("defense: %+v", slots)
 	}
 	if err := s.SetDefense(u, 2, "mon-bbb", ""); err != nil {
 		t.Fatal(err)
+	}
+	// 同系列融合培育魔宠（如 100005/100007 摩布拉，batch=100）跨槽互斥
+	insertMonster(t, s, u, "mon-mob1", 100005)
+	insertMonster(t, s, u, "mon-mob2", 100007)
+	if err := s.SetDefense(u, 3, "mon-mob1", ""); err != nil {
+		t.Fatalf("SetDefense mob1: %v", err)
+	}
+	if err := s.SetDefense(u, 4, "mon-mob2", ""); !errors.Is(err, cn35game.ErrGuildMonster) {
+		t.Fatalf("同系列培育魔宠跨槽应 ErrGuildMonster: %v", err)
+	}
+	if err := s.RemoveDefense(u, "mon-mob1", ""); err != nil {
+		t.Fatalf("RemoveDefense mob1: %v", err)
 	}
 	if err := s.RemoveDefense(u, "mon-bbb", ""); err != nil {
 		t.Fatalf("RemoveDefense: %v", err)

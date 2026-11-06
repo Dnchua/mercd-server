@@ -207,6 +207,10 @@ func receiveTutorialRewardHandler(dep Deps) httpapi.Handler {
 		data := map[string]any{
 			"tutorial_task_list": tutorialTaskListDocs(progress, claimed),
 		}
+		if def.RewardKind == "item" {
+			data["user_items"] = nil
+			data["user_items_hash"] = nil
+		}
 		if snap, serr := dep.Accounts.Snapshot(req.UserID); serr == nil {
 			data["user"] = snap.User
 		}

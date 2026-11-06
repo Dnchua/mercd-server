@@ -707,7 +707,11 @@ func guildDefenseSlotDoc(dep Deps, s GWDefenseSlot) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	doc["batch"] = s.Batch
+	if s.Batch != 0 {
+		doc["batch"] = s.Batch
+	} else {
+		doc["batch"] = MonsterBatch(s.MonsterID)
+	}
 	return doc, nil
 }
 
@@ -725,7 +729,7 @@ func guildDefenseDeckDoc(dep Deps, slots []GWDefenseSlot) (map[string]any, error
 }
 
 // guildMonstersHandler GET /guilds/monsters：可选防卫魔宠列表（账号魔宠
-// 全量，客户端按 guild_deck 已选排除；batch 占位 0）。
+// 全量，客户端按 guild_deck 已选 uuid 及非负 batch 排除；普通魔宠 batch=-1）。
 func guildMonstersHandler(dep Deps) httpapi.Handler {
 	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
 		records, err := dep.Inventory.Monsters(req.UserID)
@@ -742,7 +746,6 @@ func guildMonstersHandler(dep Deps) httpapi.Handler {
 			if derr != nil {
 				return nil, derr
 			}
-			doc["batch"] = 0
 			list = append(list, doc)
 		}
 		// /guilds/monsters 原服同时下发已设防卡组（客户端编队页据此排除已选、

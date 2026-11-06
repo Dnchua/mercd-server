@@ -119,7 +119,7 @@ func (s *Store) starterUnitsTx(tx *sql.Tx, userID string) ([]int, error) {
 		userID).Scan(&leaderRaw); err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(`SELECT unit_id FROM cn35_player_units WHERE user_id=? ORDER BY unit_id`, userID)
+	rows, err := tx.Query(`SELECT unit_id FROM cn35_player_units WHERE user_id=? AND is_waiting=0 ORDER BY unit_id`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (s *Store) starterUnitsTx(tx *sql.Tx, userID string) ([]int, error) {
 func (s *Store) fillStarterDeckTx(tx *sql.Tx, userID string) error {
 	var exists int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM cn35_player_decks
-		WHERE user_id=? AND party_id='1'`, userID).Scan(&exists); err != nil {
+		WHERE user_id=? AND party_id='1' AND starter_backfill_disabled=0`, userID).Scan(&exists); err != nil {
 		return err
 	}
 	if exists == 0 {
@@ -277,9 +277,9 @@ func (s *Store) ensureStarterUnitsTx(tx *sql.Tx, userID string) error {
 
 const timeStampLayout = "2006-01-02T15:04:05.999999999Z07:00"
 
-// SetDeckUnit replaces an existing slot after checking both ownership and
-// same-party template uniqueness. The composite foreign key repeats ownership
-// enforcement at the schema boundary.
+// SetDeckUnit replaces an existing slot after checking ownership. If the
+// selected unit is already present in another slot of the same party, the two
+// slots are atomically swapped (or moved if the target slot is empty).
 func (s *Store) SetDeckUnit(userID, partyID string, slotIndex, unitID int) error {
 	if slotIndex < 0 || slotIndex >= cn35game.DefaultDeckSlots || unitID <= 0 {
 		return cn35game.ErrDeckSlotInvalid
@@ -289,28 +289,55 @@ func (s *Store) SetDeckUnit(userID, partyID string, slotIndex, unitID int) error
 			return err
 		}
 		var owned int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM cn35_player_units WHERE user_id=? AND unit_id=?`,
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM cn35_player_units WHERE user_id=? AND unit_id=? AND is_waiting=0`,
 			userID, unitID).Scan(&owned); err != nil {
 			return err
 		}
 		if owned != 1 {
 			return cn35game.ErrDeckUnitNotOwned
 		}
-		var duplicate int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM cn35_player_deck_slots
-			WHERE user_id=? AND party_id=? AND unit_id=? AND slot_index<>?`,
-			userID, partyID, unitID, slotIndex).Scan(&duplicate); err != nil {
+		var current sql.NullInt64
+		if err := tx.QueryRow(`SELECT unit_id FROM cn35_player_deck_slots
+			WHERE user_id=? AND party_id=? AND slot_index=?`,
+			userID, partyID, slotIndex).Scan(&current); err != nil {
 			return err
 		}
-		if duplicate != 0 {
-			return cn35game.ErrDeckDuplicate
+		if current.Valid && int(current.Int64) == unitID {
+			return markDeckMutatedTx(tx, userID, partyID, s.clockNowUTC().Format(timeStampLayout))
 		}
-		if _, err := tx.Exec(`UPDATE cn35_player_deck_slots SET unit_id=?
-			WHERE user_id=? AND party_id=? AND slot_index=?`,
-			unitID, userID, partyID, slotIndex); err != nil {
-			return fmt.Errorf("cn35store: 设置编队槽位失败: %w", err)
+		var otherSlot int
+		err := tx.QueryRow(`SELECT slot_index FROM cn35_player_deck_slots
+			WHERE user_id=? AND party_id=? AND unit_id=? AND slot_index<>?`,
+			userID, partyID, unitID, slotIndex).Scan(&otherSlot)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
 		}
-		return touchDeckTx(tx, userID, partyID, s.clockNowUTC().Format(timeStampLayout))
+		if err == nil {
+			if _, err := tx.Exec(`UPDATE cn35_player_deck_slots SET unit_id=NULL
+				WHERE user_id=? AND party_id=? AND slot_index=?`,
+				userID, partyID, otherSlot); err != nil {
+				return fmt.Errorf("cn35store: 腾出原编队槽位失败: %w", err)
+			}
+			if _, err := tx.Exec(`UPDATE cn35_player_deck_slots SET unit_id=?
+				WHERE user_id=? AND party_id=? AND slot_index=?`,
+				unitID, userID, partyID, slotIndex); err != nil {
+				return fmt.Errorf("cn35store: 设置目标编队槽位失败: %w", err)
+			}
+			if current.Valid {
+				if _, err := tx.Exec(`UPDATE cn35_player_deck_slots SET unit_id=?
+					WHERE user_id=? AND party_id=? AND slot_index=?`,
+					current.Int64, userID, partyID, otherSlot); err != nil {
+					return fmt.Errorf("cn35store: 对调原编队槽位失败: %w", err)
+				}
+			}
+		} else {
+			if _, err := tx.Exec(`UPDATE cn35_player_deck_slots SET unit_id=?
+				WHERE user_id=? AND party_id=? AND slot_index=?`,
+				unitID, userID, partyID, slotIndex); err != nil {
+				return fmt.Errorf("cn35store: 设置编队槽位失败: %w", err)
+			}
+		}
+		return markDeckMutatedTx(tx, userID, partyID, s.clockNowUTC().Format(timeStampLayout))
 	})
 }
 
@@ -338,7 +365,7 @@ func (s *Store) ClearDeckUnit(userID, partyID string, slotIndex, expectedUnitID 
 			userID, partyID, slotIndex); err != nil {
 			return err
 		}
-		return touchDeckTx(tx, userID, partyID, s.clockNowUTC().Format(timeStampLayout))
+		return markDeckMutatedTx(tx, userID, partyID, s.clockNowUTC().Format(timeStampLayout))
 	})
 }
 
@@ -363,6 +390,14 @@ func requireDeckAndSlotTx(tx *sql.Tx, userID, partyID string, slotIndex int) err
 
 func touchDeckTx(tx *sql.Tx, userID, partyID, at string) error {
 	_, err := tx.Exec(`UPDATE cn35_player_decks SET updated_at=?
+		WHERE user_id=? AND party_id=?`, at, userID, partyID)
+	return err
+}
+
+func markDeckMutatedTx(tx *sql.Tx, userID, partyID, at string) error {
+	_, err := tx.Exec(`UPDATE cn35_player_decks
+		SET updated_at=?,
+		    starter_backfill_disabled=CASE WHEN party_id='1' THEN 1 ELSE starter_backfill_disabled END
 		WHERE user_id=? AND party_id=?`, at, userID, partyID)
 	return err
 }

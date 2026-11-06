@@ -584,3 +584,33 @@ func TestStarterPresentsSeeded(t *testing.T) {
 		t.Fatalf("复登后礼物行=%d want 3（含已领）", total)
 	}
 }
+
+func TestWaitingUnitPresentCapKeepsGiftAndBatchAtomic(t *testing.T) {
+	s := openStore(t, t.TempDir())
+	defer s.Close()
+	cat := testCatalog(t)
+	uid := seedAccount(t, s, "waiting-cap")
+	clearPresents(t, s, uid)
+	insertUnit(t, s, uid, 152, 1)
+	if _, err := s.DB().Exec(`UPDATE cn35_player_units SET is_waiting=1,duplicated_count=15 WHERE user_id=? AND unit_id=152`, uid); err != nil {
+		t.Fatal(err)
+	}
+	insertPresent(t, s, uid, "cap-unit", "unit", 152, 1, 0)
+	insertPresent(t, s, uid, "cap-coin", "coin", 1, 50, 0)
+	if _, err := s.ReceivePresent(uid, "cap-unit", 2000, cat); !errors.Is(err, cn35game.ErrPresentUnitCap) {
+		t.Fatalf("single: %v", err)
+	}
+	if _, err := s.ReceiveAllPresents(uid, false, 2000, cat); !errors.Is(err, cn35game.ErrPresentUnitCap) {
+		t.Fatalf("batch: %v", err)
+	}
+	var dup, received int
+	if err := s.DB().QueryRow(`SELECT duplicated_count FROM cn35_player_units WHERE user_id=? AND unit_id=152`, uid).Scan(&dup); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB().QueryRow(`SELECT count(*) FROM cn35_user_presents WHERE user_id=? AND received_at!=0`, uid).Scan(&received); err != nil {
+		t.Fatal(err)
+	}
+	if dup != 15 || received != 0 {
+		t.Fatalf("dup=%d received=%d", dup, received)
+	}
+}

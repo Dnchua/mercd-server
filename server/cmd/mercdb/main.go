@@ -37,6 +37,10 @@ func run() error {
 	if len(os.Args) > 1 && os.Args[1] == "cn35-roster" {
 		return cn35Roster(os.Args[2:])
 	}
+	// 单机预置种子库生成入口（合入截止最新 SQL 迁移 + NPC 公会 + 名册卡池 + 资源配置）。
+	if len(os.Args) > 1 && os.Args[1] == "cn35-seed-db" {
+		return cn35SeedDB(os.Args[2:])
+	}
 	fs := flag.NewFlagSet("mercdb", flag.ContinueOnError)
 	name := fs.String("name", "", "new migration name (lowercase snake_case)")
 	dir := fs.String("dir", "internal/database/migrations", "SQL source directory for new")

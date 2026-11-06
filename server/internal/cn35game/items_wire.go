@@ -157,7 +157,19 @@ func itemRowDoc(pi PlayerItem) map[string]any {
 // bag_category 分组。写面回推与 /user_items/ 同源（ITEM350-13），
 // 保证结算/礼物/兑换/觉醒后客户端缓存即时刷新。
 func userItemsData(dep Deps, userID string) (map[string]any, error) {
-	items, err := dep.Items.PlayerItems(userID)
+	itemStore := dep.Items
+	if itemStore == nil {
+		if is, ok := dep.Accounts.(ItemStore); ok {
+			itemStore = is
+		}
+	}
+	if itemStore == nil {
+		return map[string]any{
+			"user_items":      []any{},
+			"user_items_hash": map[string]any{},
+		}, nil
+	}
+	items, err := itemStore.PlayerItems(userID)
 	if err != nil {
 		return nil, fmt.Errorf("cn35 物品库存读取失败: %w", err)
 	}
@@ -244,11 +256,15 @@ func medalGoodsDoc(g MedalGoodDraft, def ItemDef) map[string]any {
 	if wirePrice <= 0 {
 		wirePrice = 1
 	}
+	name := g.Name
+	if (g.ItemKey == "ap_potion" || g.ItemKey == "bp_potion") && def.Name != "" {
+		name = def.Name
+	}
 	doc := map[string]any{
 		"id":         g.GoodsID,
 		"goods_id":   g.GoodsID,
 		"item_id":    def.ContentID,
-		"name":       g.Name,
+		"name":       name,
 		"price":      wirePrice,
 		"price_name": "徽章",
 		"currency":   "medal",
@@ -489,6 +505,7 @@ func unitAwakeHandler(dep Deps) httpapi.Handler {
 			data[k] = v
 		}
 		data["duplicate"] = res.Duplicate
+		data["albums"] = nil
 		c.Decoded["awakened"] = true
 		return cn35wire.MarshalJSON(map[string]any{
 			"status": "success",
@@ -512,6 +529,8 @@ func useItemHandler(dep Deps) httpapi.Handler {
 			contentID = 201
 		case "potion_bp", "bp_potion":
 			contentID = 202
+		case "coin_ap":
+			contentID = 203
 		default:
 			contentID, idErr = strconv.Atoi(rawID)
 		}
@@ -524,7 +543,13 @@ func useItemHandler(dep Deps) httpapi.Handler {
 			"cn35": true, "uid": req.UserID, "endpoint": "user_items_use",
 			"content_id": contentID, "count": count,
 		}
-		if dep.ItemUse == nil {
+		itemUse := dep.ItemUse
+		if itemUse == nil {
+			if iu, ok := dep.Accounts.(ItemUseStore); ok {
+				itemUse = iu
+			}
+		}
+		if itemUse == nil {
 			return cn35wire.MarshalJSON(trainingError(
 				"使用失败", "服务端未装配物品使用写面。"))
 		}
@@ -532,7 +557,7 @@ func useItemHandler(dep Deps) httpapi.Handler {
 			return cn35wire.MarshalJSON(trainingError(
 				"使用失败", "参数无效，请重新打开物品界面。"))
 		}
-		res, err := dep.ItemUse.UseItem(req.UserID, contentID, count)
+		res, err := itemUse.UseItem(req.UserID, contentID, count)
 		if err != nil {
 			switch {
 			case errors.Is(err, ErrItemNotFound):
@@ -553,6 +578,7 @@ func useItemHandler(dep Deps) httpapi.Handler {
 		numericFieldsToNumber(snap.User, "leader_unit_id", "helper_unit_id")
 		data := map[string]any{
 			"user":          snap.User,
+			"user_coin":     snap.UserCoin,
 			"used_item_key": res.ItemKey,
 			"count":         res.Count,
 			"duplicate":     res.Duplicate,

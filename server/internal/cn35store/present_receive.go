@@ -16,6 +16,7 @@ import (
 	"fmt"
 
 	"github.com/Dnchua/mercd-server/server/internal/cn35game"
+	"github.com/Dnchua/mercd-server/server/internal/statmodel"
 )
 
 // 编译期断言：Store 满足礼物领取写面契约。
@@ -77,13 +78,14 @@ func (s *Store) ReceivePresent(userID, uuid string, now int64, cat cn35game.Unit
 	if !presentGrantSupported(r, cat) {
 		return nil, cn35game.ErrPresentUnsupported
 	}
+	unitCaps := presentUnitCaps([]cn35game.PresentRecord{r}, cat)
 	// 阶段 2（事务内）：条件标记 + 发奖。并发二次领取由条件更新兜底。
 	res := &cn35game.PresentReceiveResult{Granted: []cn35game.PresentGrant{}}
 	err = s.withTx(func(tx *sql.Tx) error {
 		if err := markPresentReceivedTx(tx, userID, uuid, now); err != nil {
 			return err
 		}
-		g, err := grantPresentTx(tx, userID, r)
+		g, err := grantPresentTx(tx, userID, r, unitCaps[int(r.ContentID)])
 		if err != nil {
 			return err
 		}
@@ -135,6 +137,7 @@ func (s *Store) ReceiveAllPresents(userID string, withoutUnit bool, now int64, c
 		}
 		claimable = append(claimable, r)
 	}
+	unitCaps := presentUnitCaps(claimable, cat)
 	// 阶段 2（事务内）：逐行条件标记 + 发奖；任一失败整批回滚。
 	res := &cn35game.PresentReceiveResult{Granted: []cn35game.PresentGrant{}}
 	err = s.withTx(func(tx *sql.Tx) error {
@@ -142,7 +145,7 @@ func (s *Store) ReceiveAllPresents(userID string, withoutUnit bool, now int64, c
 			if err := markPresentReceivedTx(tx, userID, r.UUID, now); err != nil {
 				return err
 			}
-			g, gerr := grantPresentTx(tx, userID, r)
+			g, gerr := grantPresentTx(tx, userID, r, unitCaps[int(r.ContentID)])
 			if gerr != nil {
 				return gerr
 			}
@@ -172,7 +175,7 @@ func markPresentReceivedTx(tx *sql.Tx, userID, uuid string, now int64) error {
 
 // grantPresentTx 发奖原语：单位/魔宠经 award_tx.go 共享语义入库。
 // 调用前必须已过 presentGrantSupported（模板校验在事务外）。
-func grantPresentTx(tx *sql.Tx, userID string, r cn35game.PresentRecord) (*cn35game.PresentGrant, error) {
+func grantPresentTx(tx *sql.Tx, userID string, r cn35game.PresentRecord, maxDup int) (*cn35game.PresentGrant, error) {
 	g := &cn35game.PresentGrant{ContentType: r.ContentType, ContentID: r.ContentID, Amount: r.Amount}
 	switch r.ContentType {
 	case "unit":
@@ -182,6 +185,19 @@ func grantPresentTx(tx *sql.Tx, userID string, r cn35game.PresentRecord) (*cn35g
 		if err := tx.QueryRow(`SELECT count(*) FROM cn35_player_units
 			WHERE user_id=? AND unit_id=?`, userID, r.ContentID).Scan(&owned); err != nil {
 			return nil, fmt.Errorf("cn35store: 礼物单位归属读取失败: %w", err)
+		}
+		var dup int
+		if owned != 0 {
+			if err := tx.QueryRow(`SELECT duplicated_count FROM cn35_player_units WHERE user_id=? AND unit_id=?`, userID, r.ContentID).Scan(&dup); err != nil {
+				return nil, err
+			}
+		}
+		copies := r.Amount
+		if owned == 0 {
+			copies--
+		}
+		if copies > int64(maxDup-dup) {
+			return nil, cn35game.ErrPresentUnitCap
 		}
 		if owned == 0 {
 			if err := settleUnitCopyTx(tx, userID, int(r.ContentID), 0, true); err != nil {
@@ -221,4 +237,17 @@ func grantPresentTx(tx *sql.Tx, userID string, r cn35game.PresentRecord) (*cn35g
 		return nil, cn35game.ErrPresentUnsupported
 	}
 	return g, nil
+}
+
+// presentUnitCaps 在事务外读取模板，避免目录实现嵌套获取数据库连接。
+func presentUnitCaps(records []cn35game.PresentRecord, cat cn35game.UnitCatalog) map[int]int {
+	caps := map[int]int{}
+	for _, r := range records {
+		if r.ContentType == "unit" {
+			if u, err := cat.Unit(int(r.ContentID)); err == nil && u != nil {
+				caps[int(r.ContentID)] = statmodel.MaxDuplicatedCount(u.Rare)
+			}
+		}
+	}
+	return caps
 }

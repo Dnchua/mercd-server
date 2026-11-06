@@ -68,8 +68,42 @@ func TestDeckDefaultsAreOwnedAndPersistAcrossRestart(t *testing.T) {
 	if err := st.SetDeckUnit(uidA, "2", 0, 336); err != nil {
 		t.Fatalf("向本队空槽加入单位: %v", err)
 	}
-	if err := st.SetDeckUnit(uidA, "1", 2, 152); !errors.Is(err, cn35game.ErrDeckDuplicate) {
-		t.Fatalf("同队重复模板拒绝: %v", err)
+	// 同队已存在单位：1号位(slot 1)=152 与 2号位(slot 2)=157 对调
+	if err := st.SetDeckUnit(uidA, "1", 2, 152); err != nil {
+		t.Fatalf("同队槽位对调应成功: %v", err)
+	}
+	swappedA, err := st.Decks(uidA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if swappedA[0].Slots[1] != "157" || swappedA[0].Slots[2] != "152" {
+		t.Fatalf("同队槽位对调结果错误: %+v", swappedA[0].Slots)
+	}
+	// 卸下 1 号位(slot 1, 现为 157) 变为空槽，且初始卡回填不得将其覆盖
+	if err := st.ClearDeckUnit(uidA, "1", 1, 157); err != nil {
+		t.Fatalf("卸下首队槽位应成功: %v", err)
+	}
+	afterClearA, err := st.Decks(uidA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterClearA[0].Slots[1] != "" {
+		t.Fatalf("卸下首队初始卡后不得被自动回填覆盖: %+v", afterClearA[0].Slots)
+	}
+	// 空槽挪位：点空槽 1 号位(slot 1) 选择 2 号位(slot 2) 上的 152，应挪到 slot 1 且 slot 2 变空
+	if err := st.SetDeckUnit(uidA, "1", 1, 152); err != nil {
+		t.Fatalf("同队向空槽挪位应成功: %v", err)
+	}
+	afterMoveA, err := st.Decks(uidA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterMoveA[0].Slots[1] != "152" || afterMoveA[0].Slots[2] != "" {
+		t.Fatalf("同队向空槽挪位结果错误: %+v", afterMoveA[0].Slots)
+	}
+	// 恢复首队满编供后续持久化校验
+	if err := st.SetDeckUnit(uidA, "1", 2, 157); err != nil {
+		t.Fatalf("恢复首队槽位失败: %v", err)
 	}
 	if err := st.SetDeckUnit(uidA, "1", 2, 396); !errors.Is(err, cn35game.ErrDeckUnitNotOwned) {
 		t.Fatalf("跨账号模板拒绝: %v", err)
@@ -367,5 +401,38 @@ func TestDeckMigrationUpgradesRepresentative0007AccountAndInventory(t *testing.T
 	}
 	if len(defaults) != 2 || defaults[0].Slots[0] != "348" {
 		t.Fatalf("旧账号首次读取的队伍只使用旧账号库存: %+v", defaults)
+	}
+}
+
+func TestWaitBackRetryPreservesFirstDeckGap(t *testing.T) {
+	st := openStore(t, t.TempDir())
+	defer st.Close()
+	uid := seedAccount(t, st, "deck-wait-gap")
+	decks, err := st.Decks(uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decks[0].Slots[1] != "152" {
+		t.Fatalf("unexpected starter deck %v", decks[0].Slots)
+	}
+	if err = st.WaitUnits(uid, []int{152}); err != nil {
+		t.Fatal(err)
+	}
+	if err = st.WaitUnits(uid, []int{152}); err != nil {
+		t.Fatalf("wait retry: %v", err)
+	}
+	decks, err = st.Decks(uid)
+	if err != nil || decks[0].Slots[1] != "" {
+		t.Fatalf("wait deck %+v: %v", decks, err)
+	}
+	if err = st.BackUnits(uid, []int{152}); err != nil {
+		t.Fatal(err)
+	}
+	if err = st.BackUnits(uid, []int{152}); err != nil {
+		t.Fatalf("back retry: %v", err)
+	}
+	decks, err = st.Decks(uid)
+	if err != nil || decks[0].Slots[1] != "" {
+		t.Fatalf("back deck %+v: %v", decks, err)
 	}
 }

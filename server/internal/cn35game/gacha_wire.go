@@ -284,6 +284,7 @@ func gachaExecuteSettle(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
 	// temp_gacha_reward 留空：首期无额外奖励，客户端 GachaResult.cs
 	// 在该键非空时弹结算 modal，空/缺键为正常路径。
 	data["temp_gacha_reward"] = []any{}
+	data["albums"] = nil
 	c.Decoded["gacha_operation_id"] = rec.OperationID
 	c.Decoded["gacha_count"] = count
 	body, merr := cn35wire.MarshalJSON(map[string]any{
@@ -378,6 +379,7 @@ func gachaReplayBody(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
 		data["temp_gacha_result"] = gachaResultEntriesFallback(dep, results)
 	}
 	data["temp_gacha_reward"] = []any{}
+	data["albums"] = nil
 	c.Decoded["gacha_replay"] = true
 	c.Decoded["gacha_operation_id"] = prev.OperationID
 	return cn35wire.MarshalJSON(map[string]any{

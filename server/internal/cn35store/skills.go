@@ -193,11 +193,11 @@ func itemSkillID(itemKey string) int {
 	return 0
 }
 
-// unitOwnedTx 账号单位存在性校验（单位行属 cn35_player_units）。
+// unitOwnedTx 账号单位存在性校验（单位行属 cn35_player_units 且处于同行状态）。
 func unitOwnedTx(tx *sql.Tx, userID string, unitID int) bool {
 	var n int
 	if err := tx.QueryRow(`SELECT COUNT(1) FROM cn35_player_units
-		WHERE user_id=? AND unit_id=?`, userID, unitID).Scan(&n); err != nil {
+		WHERE user_id=? AND unit_id=? AND is_waiting=0`, userID, unitID).Scan(&n); err != nil {
 		return false
 	}
 	return n == 1

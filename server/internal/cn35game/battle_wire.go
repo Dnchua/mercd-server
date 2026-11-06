@@ -47,6 +47,71 @@ func questModal(title, body string) map[string]any {
 	}}
 }
 
+// questNoAPModal AP 不足响应：下发原生 modal.type="no_ap"（Common.cs:2112-2116、
+// NoApModal.cs），呼出客户端内置 AP 回复确认框（元气之水 / 钻石双按钮）。
+func questNoAPModal(dep Deps, userID string, fromMessage bool) map[string]any {
+	itemStore := dep.Items
+	if itemStore == nil {
+		if is, ok := dep.Accounts.(ItemStore); ok {
+			itemStore = is
+		}
+	}
+	var potionCount int64
+	if itemStore != nil {
+		if items, err := itemStore.PlayerItems(userID); err == nil {
+			for _, pi := range items {
+				if pi.ItemKey == "ap_potion" && pi.Quantity > 0 {
+					potionCount = int64(pi.Quantity)
+					break
+				}
+			}
+		}
+	}
+	var coinAmount int64
+	data := map[string]any{}
+	if dep.Accounts != nil {
+		if snap, err := dep.Accounts.Snapshot(userID); err == nil && snap != nil {
+			numericFieldsToNumber(snap.User, "leader_unit_id", "helper_unit_id")
+			data["user"] = snap.User
+			data["user_coin"] = snap.UserCoin
+			if snap.UserCoin != nil {
+				coinAmount = int64(numOf(snap.UserCoin["amount"]))
+			}
+		}
+	}
+	out := map[string]any{
+		"modal": map[string]any{
+			"type":  "no_ap",
+			"title": "体力不足",
+			"body":  "AP 不足，无法开始战斗。",
+			"no_ap": map[string]any{
+				"from_message": fromMessage,
+				"item":         potionCount,
+				"coin":         coinAmount,
+				"url": map[string]any{
+					"item": "/user_items/use/?id=201&count=1",
+					"coin": "/user_items/use/?id=coin_ap&count=1",
+				},
+			},
+		},
+	}
+	if len(data) > 0 {
+		out["data"] = data
+	}
+	return out
+}
+
+// usersCheckAPHandler /users/check_ap：消息栏 AP 回复按钮（Messages.cs:746 ApHealButton）
+// 触发的原生 NoApModal 弹窗。
+func usersCheckAPHandler(dep Deps) httpapi.Handler {
+	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
+		c.Decoded = map[string]any{
+			"cn35": true, "uid": req.UserID, "endpoint": "users_check_ap",
+		}
+		return cn35wire.MarshalJSON(questNoAPModal(dep, req.UserID, true))
+	})
+}
+
 // statusDoc 组装 {"status":...} 简表响应。
 func statusDoc(status string) map[string]any {
 	return map[string]any{"status": status}
@@ -217,7 +282,7 @@ func questExecuteHandler(dep Deps) httpapi.Handler {
 		if err != nil {
 			switch {
 			case errors.Is(err, ErrBattleAP):
-				return cn35wire.MarshalJSON(questModal("体力不足", "AP 不足，无法开始战斗。"))
+				return cn35wire.MarshalJSON(questNoAPModal(dep, req.UserID, false))
 			case errors.Is(err, ErrDeckNotFound):
 				return cn35wire.MarshalJSON(questModal("无法战斗", "编队编号无效"))
 			case errors.Is(err, ErrDeckSlotInvalid):
@@ -405,8 +470,17 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 	}
 	bgm := battleBgm(cat, battle)
 	bid := sess.BattleID
+	userDoc := map[string]any{}
+	for k, v := range snap.User {
+		userDoc[k] = v
+	}
+	userDoc["exp_table"] = UserExpWindowForGain(
+		int(numOf(snap.User["level"])),
+		int(numOf(snap.User["exp"])),
+		sess.Exp,
+	)
 	doc := map[string]any{
-		"user":           snap.User,
+		"user":           userDoc,
 		"quest":          questDoc,
 		"units":          units,
 		"monsters":       monsters,
@@ -426,7 +500,7 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 		"lose_url":          "/quests/lose?bid=" + bid,
 		"next_page_message": battleNextPage(cat, battle),
 		"battle_log":        derefBool(cat.Defaults.BattleLog, false),
-		"data":              map[string]any{"user": snap.User},
+		"data":              map[string]any{"user": userDoc},
 	}
 	return doc, nil
 }
@@ -757,6 +831,30 @@ func questResultHandler(dep Deps) httpapi.Handler {
 			return nil, err
 		}
 		if res.Already {
+			if res.Session != nil && res.Session.Status == BattleCleared {
+				data := map[string]any{}
+				for _, r := range res.Session.Rewards {
+					switch r.Key {
+					case "skill":
+						data["user_skills"] = nil
+					case "item":
+						data["user_items"] = nil
+						data["user_items_hash"] = nil
+					case "seed":
+						data["monster_albums"] = nil
+						if inv, ierr := inventoryDataFor(dep, c, req.UserID); ierr == nil {
+							data["user_monsters"] = inv["user_monsters"]
+							data["user_units"] = inv["user_units"]
+						}
+					}
+				}
+				if len(data) > 0 {
+					return cn35wire.MarshalJSON(map[string]any{
+						"status": "already_received",
+						"data":   data,
+					})
+				}
+			}
 			return cn35wire.MarshalJSON(statusDoc("already_received"))
 		}
 		snap, err := dep.Accounts.Snapshot(req.UserID)
@@ -770,24 +868,31 @@ func questResultHandler(dep Deps) httpapi.Handler {
 				data[fmt.Sprintf("quests_%d", res.Session.AreaID)] = quests
 			}
 			if len(res.MonsterUUIDs) > 0 {
+				data["monster_albums"] = nil
 				if inv, err := inventoryDataFor(dep, c, req.UserID); err == nil {
 					data["user_monsters"] = inv["user_monsters"]
 					data["user_units"] = inv["user_units"]
 				}
 			}
 		}
-		// ITEM350-13：item/gacha_point 入账后回推背包与余额，客户端返回
-		// 背包即读到最新 user_items_hash（与 /user_items/ 同源投影）。
-		if dep.Items != nil {
-			for _, r := range res.Rewards {
-				if r.Key != "item" {
-					continue // gacha_point 已随 data.user 下发
-				}
-				if itemsData, ierr := userItemsData(dep, req.UserID); ierr == nil {
-					for k, v := range itemsData {
-						data[k] = v
+		// ITEM350-13 / RUNE350：item 入账后回推背包；skill 入账后按原服契约下发
+		// user_skills:null 使客户端 DataCache.Add 触发 Expire("user_skills")，
+		// 切回符文页时经 requireData 自动重拉 /user_skills/。
+		for _, r := range res.Rewards {
+			switch r.Key {
+			case "item":
+				if dep.Items != nil {
+					if itemsData, ierr := userItemsData(dep, req.UserID); ierr == nil {
+						for k, v := range itemsData {
+							data[k] = v
+						}
 					}
+				} else {
+					data["user_items"] = nil
+					data["user_items_hash"] = nil
 				}
+			case "skill":
+				data["user_skills"] = nil
 			}
 		}
 		c.Decoded["clear_count"] = res.ClearCount

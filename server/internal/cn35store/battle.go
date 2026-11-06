@@ -274,7 +274,7 @@ func resolvePartyTx(tx *sql.Tx, userID string, ordinal, unitLimit int) (string, 
 		var rec cn35game.UnitRecord
 		var protected, newcomer int
 		err := tx.QueryRow(`SELECT unit_id,level,duplicated_count,protected,newcomer,monster_uuid
-			FROM cn35_player_units WHERE user_id=? AND unit_id=?`, userID, unitID).
+			FROM cn35_player_units WHERE user_id=? AND unit_id=? AND is_waiting=0`, userID, unitID).
 			Scan(&rec.UnitID, &rec.Level, &rec.DuplicatedCount, &protected, &newcomer, &rec.MonsterUUID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ``, nil, nil, cn35game.ErrDeckUnitNotOwned
@@ -670,31 +670,18 @@ func addExpTx(tx *sql.Tx, userID string, gain int) error {
 	}
 	now := nowUTC()
 	if newLevel > level {
-		// 升级：max_ap=level+19。AP 按用户 2026-10-20 更正口径**叠加增量**
-		// （旧口径「直接补满」作废）：newAP = 旧AP + (新等级上限-旧等级上限)。
-		// 触顶时按 recoverAPTx 同口径重置恢复锚点，否则保留原锚点继续恢复。
-		oldMax := cn35game.UserMaxAP(level)
+		// 升级：max_ap=level+19。AP 按新等级完整上限叠加（允许溢出持有）：
+		// newAP = 旧AP + 新等级上限。触顶/溢出时按 recoverAPTx 同口径重置恢复锚点。
 		newMax := cn35game.UserMaxAP(newLevel)
-		newAP := ap + (newMax - oldMax)
-		if newAP < 0 {
-			newAP = 0
+		if ap < 0 {
+			ap = 0
 		}
-		if newAP > newMax {
-			newAP = newMax
-		}
-		if newAP >= newMax {
-			_, err := tx.Exec(`UPDATE cn35_player_profiles
-				SET level=?,exp=?,max_exp=?,max_ap=?,ap=?,ap_updated_at=?,updated_at=?
-				WHERE user_id=?`,
-				newLevel, newExp, cn35game.UserNeedExpCapped(newLevel),
-				newMax, newAP, now, now, userID)
-			return err
-		}
+		newAP := ap + newMax
 		_, err := tx.Exec(`UPDATE cn35_player_profiles
-			SET level=?,exp=?,max_exp=?,max_ap=?,ap=?,updated_at=?
+			SET level=?,exp=?,max_exp=?,max_ap=?,ap=?,ap_updated_at=?,updated_at=?
 			WHERE user_id=?`,
 			newLevel, newExp, cn35game.UserNeedExpCapped(newLevel),
-			newMax, newAP, now, userID)
+			newMax, newAP, now, now, userID)
 		return err
 	}
 	_, err := tx.Exec(`UPDATE cn35_player_profiles SET level=?,exp=?,max_exp=?,updated_at=? WHERE user_id=?`,

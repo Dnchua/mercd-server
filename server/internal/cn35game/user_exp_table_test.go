@@ -104,9 +104,8 @@ func TestUserNeedExpCappedVectors(t *testing.T) {
 	}
 }
 
-// TestUserExpWindowVectors 结算条等级需求窗口：本级起 32 档（窗口须覆盖
-// 单场跨级，见 UserExpWindow 注释）；前缀值与生产抓包
-// serve_quest_execute_1.json 的 [100,100] 逐值一致。
+// TestUserExpWindowVectors 默认结算条等级需求窗口：无增益时下发 2 档，
+// 与生产抓包 serve_quest_execute_1.json 的 [100,100] 逐值一致。
 func TestUserExpWindowVectors(t *testing.T) {
 	vectors := map[int][2]int64{
 		1:    {100, 100},
@@ -117,8 +116,8 @@ func TestUserExpWindowVectors(t *testing.T) {
 	}
 	for lv, want := range vectors {
 		got := UserExpWindow(lv)
-		if got[0] != want[0] || got[1] != want[1] {
-			t.Fatalf("UserExpWindow(%d) 前缀 = %v, want %v", lv, got[:2], want)
+		if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+			t.Fatalf("UserExpWindow(%d) = %v, want %v", lv, got, want)
 		}
 	}
 	if got := UserExpWindow(1); len(got) != userExpWindowSize {
@@ -130,6 +129,27 @@ func TestUserExpWindowVectors(t *testing.T) {
 	}
 	if got := UserExpWindow(2100); len(got) != 1 || got[0] != 4200000 {
 		t.Fatalf("UserExpWindow(2100) = %v, want [4200000]（封顶回退末档）", got)
+	}
+}
+
+// TestUserExpWindowForGainVectors 战斗结算条窗口按实际跳级数 k 动态生成 k+1 档，
+// 验证 SWFQuestClear 点击快进（canceled=true）不再产生负数百分比。
+func TestUserExpWindowForGainVectors(t *testing.T) {
+	// 17 级 (need=2956) exp=2317 获得 972 → 18 级 (need=3172) 余 333：
+	// 窗口应为 2 档 [2956, 3172]，快进计算 (3289-2956)/3172 = 10%（修复前 32 档为 -1868%）。
+	win17 := UserExpWindowForGain(17, 2317, 972)
+	if len(win17) != 2 || win17[0] != 2956 || win17[1] != 3172 {
+		t.Fatalf("17→18 单级升级窗口 = %v, want [2956 3172]", win17)
+	}
+	// 1 级 exp=50 获得 200 → 跨 2 级升至 3 级：窗口应为 3 档 [100, 100, 100]。
+	winMulti := UserExpWindowForGain(1, 50, 200)
+	if len(winMulti) != 3 || winMulti[0] != 100 || winMulti[1] != 100 || winMulti[2] != 100 {
+		t.Fatalf("1→3 跨两级窗口 = %v, want [100 100 100]", winMulti)
+	}
+	// 2099 级跨入 2100 封顶：窗口应为 2 档 [4200000, 4200000]。
+	winCap := UserExpWindowForGain(2099, 4199995, 10)
+	if len(winCap) != 2 || winCap[0] != 4200000 || winCap[1] != 4200000 {
+		t.Fatalf("2099→2100 封顶升级窗口 = %v, want [4200000 4200000]", winCap)
 	}
 }
 

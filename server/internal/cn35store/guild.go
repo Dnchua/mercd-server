@@ -990,6 +990,9 @@ func (s *Store) DefenseOf(userID string) ([]cn35game.GWDefenseSlot, error) {
 		if err = rows.Scan(&d.Slot, &d.MonsterUUID, &d.MonsterID, &d.Level, &d.Batch); err != nil {
 			return nil, err
 		}
+		if d.Batch == 0 {
+			d.Batch = cn35game.MonsterBatch(d.MonsterID)
+		}
 		out = append(out, d)
 	}
 	return out, rows.Err()
@@ -1058,14 +1061,24 @@ func (s *Store) SetDefense(userID string, slot int, monsterUUID, opKey string) e
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
+		batch := cn35game.MonsterBatch(mid)
+		// 同系列融合培育魔宠（batch >= 0）不占两个防卫槽。
+		if batch >= 0 {
+			err = tx.QueryRow(`SELECT slot FROM cn35_guild_defense
+				WHERE user_id=? AND batch=? AND slot<>?`, userID, batch, slot).Scan(&dupSlot)
+			if err == nil {
+				return cn35game.ErrGuildMonster
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
 		_ = replay
-		// batch 为客户端同批限制标记（无生产字段证据）：下发固定 0，
-		// 占位可调——数值 batching 语义由后续取证补齐。
 		_, err = tx.Exec(`INSERT INTO cn35_guild_defense
-			(user_id,slot,monster_uuid,batch,updated_at) VALUES (?,?,?,0,?)
+			(user_id,slot,monster_uuid,batch,updated_at) VALUES (?,?,?,?,?)
 			ON CONFLICT(user_id,slot) DO UPDATE SET
-			monster_uuid=excluded.monster_uuid,batch=0,updated_at=excluded.updated_at`,
-			userID, slot, monsterUUID, nowUTC())
+			monster_uuid=excluded.monster_uuid,batch=excluded.batch,updated_at=excluded.updated_at`,
+			userID, slot, monsterUUID, batch, nowUTC())
 		return err
 	})
 }

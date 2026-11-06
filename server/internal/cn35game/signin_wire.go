@@ -163,11 +163,16 @@ func signinClaimHandler(dep Deps) httpapi.Handler {
 			"coin": reward.Coin, "medal": reward.Medal, "gold": reward.Gold,
 			"item_content_id": reward.ItemContentID, "item_count": reward.ItemCount,
 		}
+		data := map[string]any{
+			"user":              snap.User,
+			"acc_login_rewards": rows,
+		}
+		if granted && reward.ItemContentID > 0 && reward.ItemCount > 0 {
+			data["user_items"] = nil
+			data["user_items_hash"] = nil
+		}
 		return cn35wire.MarshalJSON(map[string]any{
-			"data": map[string]any{
-				"user":              snap.User,
-				"acc_login_rewards": rows,
-			},
+			"data": data,
 			"modal": map[string]any{
 				"type": "ok", "title": modalTitle, "body": modalBody,
 			},

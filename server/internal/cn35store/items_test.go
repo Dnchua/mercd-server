@@ -52,10 +52,12 @@ func TestItemCatalogSeeded(t *testing.T) {
 		d.IconAssetName != "common_icon/item_4" {
 		t.Fatalf("awakening_book_5 种子错误: %+v", d)
 	}
-	if d := byKey["ap_potion"]; d.Kind != "consumable" || d.ContentID != 201 {
+	if d := byKey["ap_potion"]; d.Kind != "consumable" || d.ContentID != 201 ||
+		d.IconAssetName != "common_icon/item_67" || d.Name != "元气之水" {
 		t.Fatalf("ap_potion 种子错误: %+v", d)
 	}
-	if d := byKey["bp_potion"]; d.Kind != "consumable" || d.ContentID != 202 {
+	if d := byKey["bp_potion"]; d.Kind != "consumable" || d.ContentID != 202 ||
+		d.IconAssetName != "common_icon/item_139" || d.Name != "勇气之水" {
 		t.Fatalf("bp_potion 种子错误: %+v", d)
 	}
 }

@@ -28,6 +28,9 @@ func Open(path string) (*sql.DB, error) {
 	if err = os.MkdirAll(filepath.Dir(absolute), 0700); err != nil {
 		return nil, err
 	}
+	if _, statErr := os.Stat(os.TempDir()); statErr != nil {
+		_ = os.Setenv("TMPDIR", filepath.Dir(absolute))
+	}
 	f, err := os.OpenFile(absolute, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
@@ -43,7 +46,7 @@ func Open(path string) (*sql.DB, error) {
 	}
 	u := url.URL{Scheme: "file", Path: slash}
 	q := u.Query()
-	for _, p := range []string{"busy_timeout(5000)", "journal_mode(WAL)", "foreign_keys(ON)", "synchronous(FULL)"} {
+	for _, p := range []string{"busy_timeout(5000)", "journal_mode(WAL)", "foreign_keys(ON)", "synchronous(FULL)", "temp_store(MEMORY)"} {
 		q.Add("_pragma", p)
 	}
 	q.Set("_txlock", "immediate")

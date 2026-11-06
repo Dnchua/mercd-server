@@ -25,6 +25,7 @@
    "event_mode_released": false,
    "show_area_back_button": true,
    "weapon_effect_open": true,
+   "small_healer_value": 100,
    "max_guts_up_count": 30,
    "message_request_interval_sec": 60,
    "_note_cn35_ui_restore": "消息轮询间隔（秒）。客户端 MessageParts.StackUpdater 以 cache.consts.i(\"message_request_interval_sec\", 10) 读取，缺省 10s。服务端限流为 1 条/分钟（cn35game.MessageIntervalSec），故轮询无需高于推送节奏，设为 60 与之一致：既降请求量，也避免客户端 displayUpdateInterval （=max(-0.2857*队列长度+3.8571, 2.0)）被多余入队推低导致疯滚。60 属服务端可控参数；原服取值【未证】，不宣称与原服一致。",

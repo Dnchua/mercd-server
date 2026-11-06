@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import os
 import xml.etree.ElementTree as ET
+from standalone_manifest import configure
 
 ROOT = Path(__file__).resolve().parent.parent
 ANDROID = "{http://schemas.android.com/apk/res/android}"
@@ -59,6 +60,8 @@ def main():
             ANDROID+"name":"com.mercd.backend.BootProvider",
             ANDROID+"authorities":baseline["applicationId"]+".mercdboot",
             ANDROID+"exported":"false"})
+    if args.mode == "standalone":
+        configure(root)
     ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
     tree.write(manifest, encoding="utf-8", xml_declaration=True)
     gsp = source / "assets/gsp.txt"

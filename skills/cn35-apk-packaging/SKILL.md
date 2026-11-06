@@ -12,7 +12,7 @@ description: 引导式打包 CN3.5 梅露可物语重打包 APK。先让用户�
 **必须先问用户选哪种模式**（用 ask_user_question）：
 
 - **模式 A · 服务端 + APK**：桌面/服务器跑 `mercd35`，`inputs/files`（remote_assets）由服务端通过网络下发。APK 较小（约 325 MB 级 unity），但需要外部服务可达。**默认走 LAN IP**：模拟器和真机都填同一个内网 IP（如 `192.168.x.y:18091`），不要用 `127.0.0.1`（模拟器默认走 LAN IP 目的地；`127.0.0.1` + `adb reverse` 仅作为备用兜底，见下方说明）。
-- **模式 B · 单 APK（集成 AAR）**：`gomobile bind` 生成 `mercd35.aar`，`BootProvider` 在进程内起服（127.0.0.1:18091）；`inputs/files` 并入 `assets/unity` 走 StreamingAssets。APK 约 1.5 GB，完全离线可玩。
+- **模式 B · 单 APK（集成 AAR）**：`gomobile bind` 生成 `mercd35.aar`，`BootProvider` 在进程内起服（127.0.0.1:18091）；`inputs/files` 并入 `assets/unity`，`merge_asset_manifest.py` 生成 5 字段无 MD5 清单，客户端全部直接从 APK 内 `assets/unity/`（`StreamingAssets`）读取；构建期由 `mercdb cn35-seed-db` 合成已完成最新 SQL 迁移与静态发布的 `assets/backend/seed.sqlite3`（及记录截止 SQL 版本的 `seed_meta.json`），`BootProvider` 首启时直接复制 `seed.sqlite3` 就位并解压轻量 `assets/backend/{cn350,cards}` 配置、清理外部存储旧清单缓存（`asset_info_android4_v2_short.json.encode`），`BootActivity` 等待服务就绪后进入 Unity。无需首启解压 17,267 个文件，也避免在 32 位 `libhoudini.so` + `wazero` 下冷启动执行数十条 SQL 迁移与上万次 INSERT 导致卡黑屏闪退。
 
 模式决定一切后续步骤，**不可混用**：模式 A 若残留 BootProvider/classes2.dex/assets/backend，包内服务会抢占 18091 并遮蔽外部服务端（这是"卡数据解压中"的常见根因）；模式 B 若缺 `inputs/files` 并入，客户端会永远等远程资源下载。
 
@@ -208,16 +208,16 @@ gsp.txt 共 10 个分号分隔字段。除第 6 字段（服务地址）外，**
    cd server && gomobile bind -target=android/arm -androidapi 21 -o /tmp/mercd35.aar ./mobile
    ```
    只用 `android/arm`：客户端是 ARM32-only，多 ABI 会导致模拟器/64 位机闪退（build.sh 内注释有完整原因）。Windows 上输出路径如 `C:/temp/mercd35.aar`，记得同步改 `AAR=`。
-3. 跑 bootstrap（编译 BootProvider→classes2.dex、拷 libgojni.so、拷 assets/backend、生成 decoded-single 并并入 inputs/files + 重生成资源清单）：
+3. 跑 bootstrap（编译 BootProvider→classes2.dex、拷 libgojni.so、拷 assets/backend、调用 `mercdb cn35-seed-db` 生成预置种子库 `seed.sqlite3` 与截止 SQL 版本元数据 `seed_meta.json`、生成 decoded-single 并并入 inputs/files + 重生成 5 字段无 MD5 资源清单）：
    ```sh
    AAR=/tmp/mercd35.aar client/android-bootstrap/build.sh
    ```
-   成功标志：输出 `=> client/decoded-single (remote_assets 已并入 assets/unity，清单已重生成)`。若警告缺 `inputs/files` 则停下补资源，不要用缺资源的包继续。
+   成功标志：输出 `seed_db=... cutoff_migration=0049_...` 与 `5 字段无 MD5 模式（直读 APK 内 StreamingAssets）`。缺 inputs/files、清单引用资源不存在或资源非法时脚本直接失败，不得继续打包。脚本支持多套一层 files/ 的输入。升级时必须重建 AAR，BootProvider 仅在 `state/mercd35.sqlite3` 不存在时从 `seed.sqlite3` 初始化，已有存档原样保留并按 `schema_migrations` 增量执行 `cutoff_migration` 之后的新 SQL。
 4. 打包整包 staging 树（不是 decoded）：
    ```sh
    CLIENT_SOURCE_DIR=client/decoded-single client/build.sh --sign
    ```
-5. 安装验证：`adb install -r`；首次启动 logcat 过滤 `mercd-boot` 应见 `backend assets extracted` / `Mobile.start returned`；之后进游戏不再依赖任何外部服务，`adb reverse` 不需要也不要配（避免端口歧义）。
+5. 安装验证：`adb install -r`；首次启动 logcat 过滤 `mercd-boot` 应见 `backend assets extracted` / `seeded initial database from backend/seed.sqlite3 (..., cutoff_migration=...)` / `Mobile.start returned`，等待页约 2 秒结束后直接进入 Unity（无需解压 1.45 GB `.unity3d` 文件）；资源加载直读 APK 内 `StreamingAssets`，无 bundle HTTP 请求；之后进游戏不再依赖任何外部服务，`adb reverse` 不需要也不要配（避免端口歧义）。
 
 ## 验收判据：怎样才算“真的进游戏”
 
@@ -265,11 +265,14 @@ adb logcat -d | grep -aE "I Unity|W Unity" | grep -aviE "Track UserPerformance|F
 | 装不上 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | 设备上已装同包名但签名不同的包（如别处打的 DEBUG 签名）；先 `adb uninstall` 再 `install` |
 | 卡 `step 2 login`（服务端只见 `methods:["metaInfo"]`） | 阉割 UC SDK 后真登录走不通；按步骤 2.5 把 gsp 第 8 字段设 `false`，走“游客试玩”。**不需要模式 B**，模式 A 亦可完全走通 |
 
+| 卸载重装/全新安装后卡黑屏"正在启动单机服务…"并在 30~100s 后闪退（`libhoudini.so` SIGILL/SIGSEGV 或 `wazero` nil panic） | APK 缺少预置 `assets/backend/seed.sqlite3`，导致 32 位 ARM + `libhoudini.so` + `wazero` 从零跑数十条 SQL 迁移与近万次 `ImportRoster` INSERT 触发栈展开/解释器崩溃；重跑 `client/android-bootstrap/build.sh` 生成 `seed.sqlite3` + `seed_meta.json` 后重打包 |
+
 ## 关键文件索引
 
 - `client/prepare.py`：校验原包 SHA-256 → apktool d → 改 Manifest/gsp.txt（唯一改客户端的入口）
 - `client/build.sh`：apktool b → zipalign → 可选 apksigner；`CLIENT_SOURCE_DIR`/`CLIENT_OUTPUT_DIR` 可覆盖
-- `client/android-bootstrap/build.sh`：AAR→classes2.dex+libgojni+assets/backend→decoded-single 整包 staging
+- `client/android-bootstrap/build.sh`：AAR→classes2.dex+libgojni+assets/backend（含 `seed.sqlite3`/`seed_meta.json`）→decoded-single 整包 staging
+- `server/cmd/mercdb/cn35seeddb.go`：`mercdb cn35-seed-db`，合成截止最新 SQL 迁移的单机预置库并记录 `cutoff_migration`
 - `client/merge_asset_manifest.py`：并入 remote_assets 后重生成 unity 清单
 - `client/baseline.json`：原包路径/SHA-256/apktool 版本/输出名
 - `server/mobile/mobile.go`：gomobile 入口（`Mobile.start(state, cn350, cards, port)`）

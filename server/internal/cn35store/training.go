@@ -22,7 +22,7 @@ func (s *Store) TrainUnit(userID string, unitID, before, after, maxLevel int) (i
 	err := s.withTx(func(tx *sql.Tx) error {
 		var level, dup int
 		err := tx.QueryRow(`SELECT level,duplicated_count FROM cn35_player_units
-			WHERE user_id=? AND unit_id=?`, userID, unitID).Scan(&level, &dup)
+			WHERE user_id=? AND unit_id=? AND is_waiting=0`, userID, unitID).Scan(&level, &dup)
 		if errors.Is(err, sql.ErrNoRows) {
 			return cn35game.ErrTrainingUnitNotFound
 		}

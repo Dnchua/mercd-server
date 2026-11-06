@@ -155,10 +155,11 @@ type Monster struct {
 
 // Catalog 按模板 ID 索引的只读目录。
 type Catalog struct {
-	units    map[int]*Unit
-	monsters map[int]*Monster
-	meta     Meta
-	report   *Report
+	units      map[int]*Unit
+	monsters   map[int]*Monster
+	countryIDs map[string]int
+	meta       Meta
+	report     *Report
 }
 
 // Load 加载并校验目录。fatal 问题返回 *LoadError（errors.As 取 Report）。
@@ -204,11 +205,8 @@ func Load(dir string) (*Catalog, error) {
 	c.meta.UnitCount = len(c.units)
 	c.meta.MonsterCount = len(c.monsters)
 
-	// country_id 数值枚举派生：客户端 Unit.CalcCountrySpBonusRate 以 i()
-	// 读 country_id 统计同国人数（i() 对 JSON 字符串恒 0），必须下发
-	// NUMBER。catalog 无官方国家 id 表，按「持有该国的最小 unit id」
-	// 升序确定性编号 1..N（重建值，非原服 id 表）。
-	assignCountryIDs(c.units)
+	// 已知国家使用客户端筛选配置中的 ID；其他国家使用不与其冲突的重建值。
+	c.countryIDs = assignCountryIDs(c.units)
 
 	// 聚合缺失计数 → 每字段一条 warn（逐条噪音太大；逐条明细在 record.Missing）
 	for _, k := range sortedKeys(l.missCount) {
@@ -223,10 +221,41 @@ func Load(dir string) (*Catalog, error) {
 	return c, nil
 }
 
-// assignCountryIDs 为全部单位写回国家数值枚举 id：收集非空 Country，
-// 按「持有该国的最小 unit id」升序排序后依次编号 1..N；Country 为空
-// 的单位保持 0（下发层省略键）。
-func assignCountryIDs(units map[int]*Unit) {
+// CountryID 返回已加载目录中某国家的数值 ID；未知名称返回 0。
+func (c *Catalog) CountryID(country string) int {
+	if id, ok := knownCountryIDs[country]; ok {
+		return id
+	}
+	return c.countryIDs[country]
+}
+
+// CountryDisplayName 统一同一国家的目录别名，避免枚举 id 重复或显示不稳定。
+func CountryDisplayName(id int, name string) string {
+	switch id {
+	case 7:
+		return "电之国"
+	case 10:
+		return "沙漠之国"
+	case 12:
+		return "异邦之国"
+	default:
+		return name
+	}
+}
+
+// 已知值来自 CN3.5 UserUnits 出身国筛选配置；别名来自目录/原服对照。
+var knownCountryIDs = map[string]int{
+	"王国": 1, "妖精之国": 2, "机械之国": 3, "和之国": 4, "空之国": 5,
+	"西部之国": 6, "电之国": 7, "エレキ之国": 7, "魔法之国": 8,
+	"恐龙之国": 9, "沙漠之国": 10, "砂漠之国": 10, "死者之国": 11,
+	"异邦": 12, "异邦之国": 12, "少数民族之国": 12, "动物之国": 13,
+	"常夏之国": 14, "植物之国": 15, "科学之国": 16, "点心之国": 17,
+	"雪之国": 19, "崩坏之国": 100000, "弹幕之国": 100001,
+	"漫画之国": 100002, "华夏之国": 100003,
+}
+
+// 未知国家按最小 unit id 分配不与已知筛选值冲突的重建 ID。
+func assignCountryIDs(units map[int]*Unit) map[string]int {
 	minID := map[string]int{}
 	for _, u := range units {
 		if u.Country == "" {
@@ -251,12 +280,19 @@ func assignCountryIDs(units map[int]*Unit) {
 		return ord[i].country < ord[j].country
 	})
 	idOf := map[string]int{}
-	for i, e := range ord {
-		idOf[e.country] = i + 1
+	next := 200000
+	for _, e := range ord {
+		if id, ok := knownCountryIDs[e.country]; ok {
+			idOf[e.country] = id
+		} else {
+			idOf[e.country] = next
+			next++
+		}
 	}
 	for _, u := range units {
 		u.CountryID = idOf[u.Country]
 	}
+	return idOf
 }
 
 func sortedKeys(m map[string]int) []string {

@@ -12,6 +12,15 @@ AJAR="$(find "$SDK/platforms" -maxdepth 2 -name android.jar | sort -V | tail -1)
 AAR="${AAR:-/tmp/mercd35.aar}"
 DECODED="$(cd ../decoded && pwd)"
 
+SERVER="$(cd ../../server && pwd)"
+REMOTE="${REMOTE_ASSETS_DIR:-$SERVER/../inputs/files}"
+# 兼容用户自备压缩包多套一层 files/。
+if [ -d "$REMOTE/files" ] && [ ! -d "$REMOTE/unit" ]; then
+    REMOTE="$REMOTE/files"
+fi
+[ -d "$REMOTE/unit" ] || { echo "缺少有效资源根目录：$REMOTE（应直接包含 unit/ 等）" >&2; exit 1; }
+python3 ../../client/standalone_manifest.py "$DECODED/AndroidManifest.xml"
+
 [ -f "$AAR" ] || { echo "缺少 AAR：gomobile bind -target=android -androidapi 21 -o $AAR ./server/mobile"; exit 1; }
 
 rm -rf aar classes dex
@@ -29,7 +38,7 @@ else
 fi
 
 "$JAVAC8" -source 8 -target 8 -bootclasspath "$AJAR" \
-    -cp "$AJAR:aar/classes.jar" -d classes src/com/mercd/backend/BootProvider.java
+    -cp "$AJAR:aar/classes.jar" -d classes src/com/mercd/backend/*.java
 
 D8 --lib "$AJAR" --min-api 21 --output dex \
     classes/com/mercd/backend/*.class aar/classes.jar
@@ -48,29 +57,26 @@ cp "aar/jni/armeabi-v7a/libgojni.so" "$DECODED/lib/armeabi-v7a/libgojni.so"
 echo "=> $DECODED/lib/armeabi-v7a/libgojni.so"
 
 # 服务端资源打进 APK assets（首次启动由 BootProvider 解压到 filesDir）。
-SERVER="$(cd ../../server && pwd)"
 rm -rf "$DECODED/assets/backend"
 mkdir -p "$DECODED/assets/backend"
 cp -r "$SERVER/assets/cn350" "$DECODED/assets/backend/cn350"
 cp -r "$SERVER/assets/shared/cards" "$DECODED/assets/backend/cards"
-echo "=> $DECODED/assets/backend/{cn350,cards}"
+(
+    cd "$SERVER"
+    go run ./cmd/mercdb cn35-seed-db \
+        -assets "$SERVER/assets/cn350" \
+        -cards "$SERVER/assets/shared/cards" \
+        -out "$DECODED/assets/backend/seed.sqlite3" \
+        -meta "$DECODED/assets/backend/seed_meta.json"
+)
+echo "=> $DECODED/assets/backend/{cn350,cards,seed.sqlite3,seed_meta.json}"
 
-# 单 APK 整包：remote_assets（server-state-cn35，运行时种子不入库）并入
-# assets/unity 走 StreamingAssets——清单行无 md5 时客户端直接读包内文件，
-# 跳过首启 1.1G 解压与持久目录双份占用。staging 树 decoded-single 是
-# decoded 的 APFS clonefile 快照，避免污染 tracked 的 assets/unity。
-REMOTE="${REMOTE_ASSETS_DIR:-$SERVER/../inputs/files}"
+# 单 APK：同层资源并入 assets/unity，生成 5 字段无 MD5 清单直读 StreamingAssets。
 SINGLE="$DECODED/../decoded-single"
-if [ -d "$REMOTE" ]; then
-    rm -rf "$SINGLE"
-    cp -Rc "$DECODED" "$SINGLE" 2>/dev/null || cp -R "$DECODED" "$SINGLE"
-    # src/.（而非 src/）保证 GNU cp 也按“内容并入”处理；BSD cp 对 src/
-    # 是内容并入、GNU cp 是目录整体——Linux 上会错误产出 unity/remote_assets/。
-    cp -Rf "$REMOTE/." "$SINGLE/assets/unity/"
-    python3 "$SERVER/../client/merge_asset_manifest.py" "$SINGLE"
-    echo "=> ${SINGLE} (remote_assets 已并入 assets/unity，清单已重生成)"
-    echo "完成，接下来跑 CLIENT_SOURCE_DIR=client/decoded-single client/build.sh --sign"
-else
-    echo "警告：缺少 $REMOTE，remote_assets 未并入，清单仅覆盖内嵌基线" >&2
-    echo "完成，接下来跑 client/build.sh --sign"
-fi
+rm -rf "$SINGLE"
+cp -Rc "$DECODED" "$SINGLE" 2>/dev/null || cp -R "$DECODED" "$SINGLE"
+python3 "$SERVER/../client/standalone_manifest.py" "$SINGLE/AndroidManifest.xml"
+cp -Rf "$REMOTE/." "$SINGLE/assets/unity/"
+python3 "$SERVER/../client/merge_asset_manifest.py" "$SINGLE"
+echo "=> ${SINGLE} (资源已并入 assets/unity，5 字段无 MD5 清单直读 StreamingAssets)"
+echo "完成，接下来跑 CLIENT_SOURCE_DIR=client/decoded-single client/build.sh --sign"

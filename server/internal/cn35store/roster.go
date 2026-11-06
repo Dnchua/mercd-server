@@ -25,9 +25,10 @@ import (
 )
 
 var (
-	_ cn35game.GachaConfigStore   = (*Store)(nil)
-	_ cn35game.RosterAdminStore   = (*Store)(nil)
-	_ cn35game.UnitTemplateReader = (*Store)(nil)
+	_ cn35game.GachaConfigStore       = (*Store)(nil)
+	_ cn35game.RosterAdminStore       = (*Store)(nil)
+	_ cn35game.UnitTemplateReader     = (*Store)(nil)
+	_ cn35game.UnitTemplateBulkReader = (*Store)(nil)
 )
 
 // ---------------------------------------------------------------------------
@@ -411,6 +412,31 @@ func (s *Store) UnitTemplate(unitID int) (*cn35game.UnitTemplate, bool, error) {
 	return t, true, nil
 }
 
+// AllUnitTemplates 一条 SELECT 读出全部模板行（rosterCatalog 快照重建用）。
+func (s *Store) AllUnitTemplates() ([]*cn35game.UnitTemplate, error) {
+	rows, err := s.db.Query(`SELECT ` + templateCols + ` FROM cn35_unit_templates ORDER BY unit_id`)
+	if err != nil {
+		return nil, fmt.Errorf("cn35store: 读全部模板失败: %w", err)
+	}
+	defer rows.Close()
+	var out []*cn35game.UnitTemplate
+	for rows.Next() {
+		t, err := scanTemplate(rows)
+		if err != nil {
+			return nil, fmt.Errorf("cn35store: 读全部模板失败: %w", err)
+		}
+		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("cn35store: 读全部模板失败: %w", err)
+	}
+	return out, nil
+}
+
+// UnitTemplateGeneration 本进程模板写入代际号（成功提交后递增）。
+// 其他进程对同一库的写入不可见：mercdb cn35-roster import -commit 后须重启服务。
+func (s *Store) UnitTemplateGeneration() uint64 { return s.tplGen.Load() }
+
 // templateSnapshot 模板行全字段 JSON（修订历史快照）。
 // nil 切片按 [] 归一化：'null' 与 '[]' 语义同为"无缺失"，但 marshal 文本
 // 不等——字段级差异比较必须统一口径，否则"库内 '[]'、输入 nil"会被误判为
@@ -435,6 +461,7 @@ func (s *Store) SaveUnitTemplate(t *cn35game.UnitTemplate, actor, note string) e
 	if t == nil || t.UnitID <= 0 || t.Name == "" || t.Rare < 1 {
 		return fmt.Errorf("cn35store: 模板字段不全（id/name/rare 必填）")
 	}
+	defer s.tplGen.Add(1) // 失败/无变化时多递增一次只会多重建一次快照，无正确性影响
 	return s.withTx(func(tx *sql.Tx) error {
 		old, err := scanTemplate(tx.QueryRow(
 			`SELECT `+templateCols+` FROM cn35_unit_templates WHERE unit_id=?`, t.UnitID))
@@ -548,6 +575,29 @@ func (s *Store) ImportRoster(in *cn35game.RosterImport, commit bool, actor strin
 		if _, err := tx.Exec(`DELETE FROM cn35_unit_assets`); err != nil {
 			return fmt.Errorf("资源证据清表失败: %w", err)
 		}
+		assetStmt, err := tx.Prepare(`INSERT INTO cn35_unit_assets
+			(unit_id,family,bundle,size,crc32,sha256,served,index_sha256,index_match,source_id,updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?)
+			ON CONFLICT(unit_id,family) DO UPDATE SET
+			bundle=excluded.bundle,size=excluded.size,crc32=excluded.crc32,
+			sha256=excluded.sha256,served=excluded.served,
+			index_sha256=excluded.index_sha256,index_match=excluded.index_match,
+			source_id=excluded.source_id,updated_at=excluded.updated_at`)
+		if err != nil {
+			return fmt.Errorf("准备资源证据语句失败: %w", err)
+		}
+		defer assetStmt.Close()
+		rosterStmt, err := tx.Prepare(`INSERT INTO cn35_unit_roster
+			(unit_id,enabled,resource_ok,missing_required,wiki,blocked,notes,updated_by,updated_at)
+			VALUES (?,0,?,?,?,0,'',?,?)
+			ON CONFLICT(unit_id) DO UPDATE SET
+			resource_ok=excluded.resource_ok,missing_required=excluded.missing_required,
+			wiki=excluded.wiki,updated_at=excluded.updated_at`)
+		if err != nil {
+			return fmt.Errorf("准备名册行语句失败: %w", err)
+		}
+		defer rosterStmt.Close()
+		now := nowUTC()
 		assetRows, rosterRows, nonWiki := 0, 0, 0
 		for idStr, u := range in.Manifest.Units {
 			id, aerr := strconv.Atoi(idStr)
@@ -575,16 +625,9 @@ func (s *Store) ImportRoster(in *cn35game.RosterImport, commit bool, actor strin
 					}
 					im = &v
 				}
-				if _, err := tx.Exec(`INSERT INTO cn35_unit_assets
-					(unit_id,family,bundle,size,crc32,sha256,served,index_sha256,index_match,source_id,updated_at)
-					VALUES (?,?,?,?,?,?,?,?,?,?,?)
-					ON CONFLICT(unit_id,family) DO UPDATE SET
-					bundle=excluded.bundle,size=excluded.size,crc32=excluded.crc32,
-					sha256=excluded.sha256,served=excluded.served,
-					index_sha256=excluded.index_sha256,index_match=excluded.index_match,
-					source_id=excluded.source_id,updated_at=excluded.updated_at`,
+				if _, err := assetStmt.Exec(
 					id, fam, bundle, ev.Size, ev.CRC32, ev.SHA256, boolInt(ev.Served),
-					ev.IndexSHA256, im, manifestSrc, nowUTC()); err != nil {
+					ev.IndexSHA256, im, manifestSrc, now); err != nil {
 					return fmt.Errorf("资源证据 %s/%s 写入失败: %w", idStr, fam, err)
 				}
 				assetRows++
@@ -593,14 +636,9 @@ func (s *Store) ImportRoster(in *cn35game.RosterImport, commit bool, actor strin
 			if u.MissingRequired == nil {
 				miss = []byte("[]")
 			}
-			if _, err := tx.Exec(`INSERT INTO cn35_unit_roster
-				(unit_id,enabled,resource_ok,missing_required,wiki,blocked,notes,updated_by,updated_at)
-				VALUES (?,0,?,?,?,0,'',?,?)
-				ON CONFLICT(unit_id) DO UPDATE SET
-				resource_ok=excluded.resource_ok,missing_required=excluded.missing_required,
-				wiki=excluded.wiki,updated_at=excluded.updated_at`,
+			if _, err := rosterStmt.Exec(
 				id, boolInt(u.Qualified), string(miss), boolInt(u.Wiki),
-				actor, nowUTC()); err != nil {
+				actor, now); err != nil {
 				return fmt.Errorf("名册行 %s 写入失败: %w", idStr, err)
 			}
 			rosterRows++
@@ -719,6 +757,7 @@ func (s *Store) ImportRoster(in *cn35game.RosterImport, commit bool, actor strin
 	if err != nil {
 		return nil, err
 	}
+	s.tplGen.Add(1) // 已提交：令进程内模板快照重建
 	return res, nil
 }
 

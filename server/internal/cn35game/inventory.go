@@ -27,6 +27,7 @@ type UnitRecord struct {
 	Protected       bool   // 锁定
 	Newcomer        bool   // 新获得标记
 	MonsterUUID     string // 装备中的魔宠实例 uuid（""=未装备）
+	Waiting         bool   // 待机所状态（true=待机中，不进入 /user_units/ 同行列表）
 }
 
 // MonsterRecord 一条账号魔宠库存行（对应 cn35_player_monsters）。

@@ -35,12 +35,18 @@
 //   - 33（真阻塞）/343/344（无源）/12 缺模板候选：不在 catalog 即不出现在
 //     目录（UnitIDs 不含），如实缺省，不伪造行。
 //
-// 写面（/albums/wait、/albums/back）本期不开放：cn35_player_units 无
-// waiting 列（inventory.go UnitRecord 无该字段），需要迁移支撑，不做
-// 无状态伪造成功。
+// 写面（/albums/wait、/albums/back，0046 cn35_player_units.is_waiting）：
+//   - /albums/wait?unit_ids[]=<id>... 移入待机所：解除符文/魔宠/编队/保护/newcomer，
+//     拒绝队长/助战，置 is_waiting=1。
+//   - /albums/back?unit_ids[]=<id>... 移回同伴列表：置 is_waiting=0。
+//   - 响应同时携带顶层 status:success 与 data.status:success（客户端
+//     AlbumUnitDetail/AlbumButtonsListComponent/UnitButtonsListComponent
+//     读 data.status=="success"）并回推 user_units/user_monsters/albums/
+//     album_unit/user_skills/user_decks。
 package cn35game
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
@@ -53,7 +59,7 @@ import (
 	"github.com/Dnchua/mercd-server/server/internal/statmodel"
 )
 
-// albumDetailPathPrefix 未持有单位图鉴详情端点（album_detail_message 的
+// albumDetailPathPrefix 未持有或待机单位图鉴详情端点（album_detail_message 的
 // data_path 指向此处；?id=<unit id>）。
 const albumDetailPathPrefix = "/albums/album_unit"
 
@@ -65,52 +71,80 @@ func escapePageMessageValue(v string) string {
 }
 
 // albumDetailMessage 组装行点击的 album_detail_message。
-// 持有行：isUserUnit=true（详情走 user_units FindByKey，无需 data_path）。
-// 未持有行：isUserUnit=false + data_path（详情走 album_unit DataLoad）。
-func albumDetailMessage(unitID int, isUserUnit bool) string {
+// 活跃持有行：isUserUnit=true, isWaiting=false（详情走 user_units FindByKey，无需 data_path）。
+// 待机持有行：isUserUnit=false, isWaiting=true + data_path（详情走 album_unit DataLoad）。
+// 未持有行：isUserUnit=false, isWaiting=false + data_path（详情走 album_unit DataLoad）。
+func albumDetailMessage(unitID int, isUserUnit, isWaiting, isLeaderUnit, isHelperUnit bool) string {
 	m := fmt.Sprintf(
-		"name=AlbumUnitDetail&base=Common/Pages/AlbumUnitDetail&method=Stack&id=%d&isUserUnit=%t&isWaiting=false",
-		unitID, isUserUnit)
-	if !isUserUnit {
+		"name=AlbumUnitDetail&base=Common/Pages/AlbumUnitDetail&method=Stack&id=%d&isUserUnit=%t&isWaiting=%t",
+		unitID, isUserUnit, isWaiting)
+	if isLeaderUnit {
+		m += "&isLeaderUnit=true"
+	}
+	if isHelperUnit {
+		m += "&isHelperUnit=true"
+	}
+	if isWaiting || !isUserUnit {
 		m += "&data_path=" + escapePageMessageValue(
 			fmt.Sprintf("%s?id=%d", albumDetailPathPrefix, unitID))
 	}
 	return m
 }
 
-// buildAlbumRow 组装一条 albums 行：基础数值面复用 buildUnitDoc
-// （模板态或库存实例态由调用方决定），叠加图鉴态字段。
-func buildAlbumRow(base map[string]any, u *cardcatalog.Unit, owned bool, protected bool, rec UnitRecord) map[string]any {
-	// 行点击入口换成 AlbumUnitDetail（user_units 的 unit_detail_message
-	// 在图鉴页无消费方，置删避免误导）。
-	delete(base, "unit_detail_message")
+// buildAlbumRow 仅投影图鉴列表消费的字段，再叠加图鉴态。
+// CN3.5 AlbumListRow/UnitListRow、AlbumButtonsListComponent、AlbumUnitDetail
+// 与 UserAlbum 的 filter/SortOption 为读面；MLK 的 13 份 /albums/ 响应
+// 字段并集为 34 项（活跃持有含 user_unit_* + protected，待机持有含 waiting_unit_*）。
+// 不能直接返回 buildUnitDoc：战斗参数、技能、长篇档案随全目录重复下发，会放大 Unity 的 JSON 解析负担。
+// 详情仍从 user_units 或按 data_path 加载 album_unit，不能裁剪这些文档。
+func buildAlbumRow(doc map[string]any, u *cardcatalog.Unit, owned bool, rec UnitRecord, isLeader, isHelper bool) map[string]any {
+	base := make(map[string]any, 32)
+	for _, key := range [...]string{
+		"id", "name", "main_name", "prefix_name", "rare_type_id", "rare_type_name",
+		"attr_id", "weapon_id", "country_id", "sex_id", "age",
+		"at_max", "hp_max", "speed", "reach", "taghness",
+		"is_evolutable",
+	} {
+		if value, ok := doc[key]; ok {
+			base[key] = value
+		}
+	}
 	if _, ok := base["age"].(int); !ok {
 		base["age"] = 999
 	}
+	isUserUnit := owned && !rec.Waiting
+	isWaiting := owned && rec.Waiting
 	base["order_num"] = u.ID
 	base["can_evolution_level"] = 0
-	base["is_leader_unit"] = false
-	base["user_unit_level"] = rec.Level
-	base["user_unit_duplicated_count"] = rec.DuplicatedCount
+	base["is_leader_unit"] = isUserUnit && isLeader
 	base["evolution_map"] = map[string]any{"id": 0, "need": map[string]any{"1": 1}}
 	base["hide"] = !owned
 	// is_user_unit/is_waiting/is_showable：客户端 s() 比较，字符串形态。
-	if owned {
+	if isUserUnit {
 		base["is_user_unit"] = "true"
 		base["is_showable"] = "true"
-		base["protected"] = protected
+		base["is_waiting"] = "false"
+		base["protected"] = rec.Protected
+		base["user_unit_level"] = rec.Level
+		base["user_unit_duplicated_count"] = rec.DuplicatedCount
+	} else if isWaiting {
+		base["is_user_unit"] = "false"
+		base["is_showable"] = "true"
+		base["is_waiting"] = "true"
+		base["waiting_unit_level"] = rec.Level
+		base["waiting_unit_duplicated_count"] = rec.DuplicatedCount
 	} else {
 		base["is_user_unit"] = "false"
 		base["is_showable"] = "false"
+		base["is_waiting"] = "false"
+		base["user_unit_level"] = rec.Level
+		base["user_unit_duplicated_count"] = rec.DuplicatedCount
 	}
-	// 库存无 waiting 态（写面未开放）→ 恒 "false"（back 模式过滤后为空列表）。
-	base["is_waiting"] = "false"
 	base["unit_alert"] = false
 	base["wait_alert"] = false
 	base["max_duplicated_count"] = statmodel.MaxDuplicatedCount(u.Rare)
-	// waiting_unit_level/waiting_unit_duplicated_count：无待机单位时省略
-	// （客户端 s()/i() 缺省 "-"，AlbumUnitDetail.cs:279-296）。
-	base["album_detail_message"] = albumDetailMessage(u.ID, owned)
+	base["album_detail_message"] = albumDetailMessage(
+		u.ID, isUserUnit, isWaiting, isUserUnit && isLeader, isUserUnit && isHelper)
 	return base
 }
 
@@ -189,11 +223,26 @@ func albumEnumDocs(cat UnitCatalog) map[string]any {
 	return map[string]any{"country": countryList, "sex": sexList, "weapon": weaponList}
 }
 
+func parseSnapUnitID(v any) int {
+	switch x := v.(type) {
+	case int:
+		return x
+	case int64:
+		return int(x)
+	case float64:
+		return int(x)
+	case string:
+		id, _ := strconv.Atoi(strings.TrimSpace(x))
+		return id
+	}
+	return 0
+}
+
 // albumDataFor 组装图鉴读面 data 键集合。
 // 库存行引用不存在模板 → 明确数据错误（与 inventoryDataFor 同策略）。
 func albumDataFor(dep Deps, c *httpapi.Ctx, userID string) (map[string]any, error) {
 	owned := map[int]UnitRecord{}
-	hideCount, ownedCount := 0, 0
+	hideCount, ownedCount, waitingCount := 0, 0, 0
 	if dep.Inventory != nil {
 		urecs, err := dep.Inventory.Units(userID)
 		if err != nil {
@@ -201,6 +250,13 @@ func albumDataFor(dep Deps, c *httpapi.Ctx, userID string) (map[string]any, erro
 		}
 		for _, r := range urecs {
 			owned[r.UnitID] = r
+		}
+	}
+	var leaderID, helperID int
+	if dep.Accounts != nil && userID != "" {
+		if snap, serr := dep.Accounts.Snapshot(userID); serr == nil && snap != nil && snap.User != nil {
+			leaderID = parseSnapUnitID(snap.User["leader_unit_id"])
+			helperID = parseSnapUnitID(snap.User["helper_unit_id"])
 		}
 	}
 	albums := []any{}
@@ -221,14 +277,15 @@ func albumDataFor(dep Deps, c *httpapi.Ctx, userID string) (map[string]any, erro
 		if derr != nil {
 			return nil, derr
 		}
-		prot := false
 		if isOwned {
-			prot = rec.Protected
 			ownedCount++
+			if rec.Waiting {
+				waitingCount++
+			}
 		} else {
 			hideCount++
 		}
-		albums = append(albums, buildAlbumRow(base, u, isOwned, prot, rec))
+		albums = append(albums, buildAlbumRow(base, u, isOwned, rec, id == leaderID, id == helperID))
 	}
 	data := map[string]any{
 		"albums":          albums,
@@ -240,7 +297,7 @@ func albumDataFor(dep Deps, c *httpapi.Ctx, userID string) (map[string]any, erro
 	}
 	c.Decoded = map[string]any{
 		"cn35": true, "uid": userID, "endpoint": "albums",
-		"total": len(albums), "owned": ownedCount, "hide": hideCount,
+		"total": len(albums), "owned": ownedCount, "waiting": waitingCount, "hide": hideCount,
 	}
 	return data, nil
 }
@@ -258,9 +315,30 @@ func albumsHandler(dep Deps) httpapi.Handler {
 	})
 }
 
+func buildAlbumUnitDoc(dep Deps, userID string, unitID int, u *cardcatalog.Unit) (map[string]any, error) {
+	rec := UnitRecord{UnitID: unitID, Level: 1}
+	if dep.Inventory != nil && userID != "" {
+		if urecs, err := dep.Inventory.Units(userID); err == nil {
+			for _, r := range urecs {
+				if r.UnitID == unitID {
+					rec = r
+					break
+				}
+			}
+		}
+	}
+	doc, derr := buildUnitDoc(rec, u)
+	if derr != nil {
+		return nil, derr
+	}
+	delete(doc, "unit_detail_message")
+	doc["evolution_map"] = map[string]any{}
+	return doc, nil
+}
+
 // albumUnitDetailHandler GET|POST /albums/album_unit?id=N 与 /albums/show_unit?unit_id=N：
-// 未持有单位图鉴详情（AlbumUnitDetail data_path 目标）。数值面与 gacha 名单同法：
-// Lv1/dup0 模板态 + 纪念覆盖层（buildUnitDoc 内处理）。
+// 未持有或待机单位图鉴详情（AlbumUnitDetail data_path 目标）。
+// 持有（含待机）单位返回实际等级/觉醒面板；未持有单位返回 Lv1/dup0 模板态。
 // 非法/未知 id → status:error + modal（客户端 ResponseFilter 弹窗后
 // CancelShowPage，不静默伪造空文档）。
 func albumUnitDetailHandler(dep Deps) httpapi.Handler {
@@ -290,15 +368,157 @@ func albumUnitDetailHandler(dep Deps) httpapi.Handler {
 			return cn35wire.MarshalJSON(trainingError(
 				"图鉴不存在", "该单位不在图鉴目录中。"))
 		}
-		doc, derr := buildUnitDoc(UnitRecord{UnitID: unitID, Level: 1}, u)
+		doc, derr := buildAlbumUnitDoc(dep, req.UserID, unitID, u)
 		if derr != nil {
 			return nil, derr
 		}
-		delete(doc, "unit_detail_message")
-		doc["evolution_map"] = map[string]any{}
 		return cn35wire.MarshalJSON(map[string]any{
 			"data": map[string]any{"album_unit": doc},
 		})
+	})
+}
+
+// collectUnitIDs 归集 unit_ids[]/unit_ids/unit_id/id 四种键形态。
+func collectUnitIDs(req *cn35wire.GameRequest) ([]int, bool) {
+	var rawList []string
+	for _, key := range []string{"unit_ids[]", "unit_ids", "unit_id", "id"} {
+		for _, src := range []map[string][]string{req.Query, req.Form} {
+			for _, v := range src[key] {
+				v = strings.TrimSpace(v)
+				if v != "" {
+					rawList = append(rawList, v)
+				}
+			}
+		}
+	}
+	if len(rawList) == 0 {
+		return nil, false
+	}
+	seen := make(map[int]bool, len(rawList))
+	out := make([]int, 0, len(rawList))
+	for _, raw := range rawList {
+		id, err := strconv.Atoi(raw)
+		if err != nil || id <= 0 {
+			return nil, false
+		}
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out, len(out) > 0
+}
+
+func albumsMutationSuccess(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest, endpoint string, unitIDs []int) ([]byte, error) {
+	data, err := writeBackData(dep, c, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+	albumData, err := albumDataFor(dep, c, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range albumData {
+		data[k] = v
+	}
+	if dep.Skills != nil {
+		skData, serr := userSkillsData(dep, req.UserID)
+		if serr != nil {
+			return nil, serr
+		}
+		for k, v := range skData {
+			data[k] = v
+		}
+	}
+	if dep.Decks != nil {
+		decks, derr := dep.Decks.Decks(req.UserID)
+		if derr != nil {
+			return nil, fmt.Errorf("cn35 待机所编队回推失败: %w", derr)
+		}
+		data["user_decks"] = DecksWire(decks)
+	}
+	if len(unitIDs) > 0 && dep.Catalog != nil {
+		if u, uerr := dep.Catalog.Unit(unitIDs[0]); uerr == nil {
+			if doc, derr := buildAlbumUnitDoc(dep, req.UserID, unitIDs[0], u); derr == nil {
+				data["album_unit"] = doc
+			}
+		}
+	}
+	// 客户端 AlbumUnitDetail/AlbumButtonsListComponent/UnitButtonsListComponent
+	// 均读取 new Document(_json).doc("data").s("status") == "success"。
+	data["status"] = "success"
+	c.Decoded = map[string]any{
+		"cn35": true, "uid": req.UserID, "endpoint": endpoint,
+		"unit_ids": unitIDs, "updated": true,
+	}
+	return cn35wire.MarshalJSON(map[string]any{
+		"status": "success",
+		"data":   data,
+	})
+}
+
+// albumsWaitHandler GET|POST /albums/wait?unit_ids[]=<id>...：将活跃同伴移入待机所。
+func albumsWaitHandler(dep Deps) httpapi.Handler {
+	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
+		unitIDs, ok := collectUnitIDs(req)
+		c.Decoded = map[string]any{
+			"cn35": true, "uid": req.UserID, "endpoint": "albums_wait",
+			"unit_ids": unitIDs,
+		}
+		if dep.UnitOps == nil || dep.Inventory == nil || dep.Catalog == nil {
+			return cn35wire.MarshalJSON(trainingError(
+				"功能未启用", "服务端未装配待机所写面。"))
+		}
+		if !ok {
+			return cn35wire.MarshalJSON(trainingError(
+				"参数非法", "未选择有效的同伴，请重新选择后再试。"))
+		}
+		if err := dep.UnitOps.WaitUnits(req.UserID, unitIDs); err != nil {
+			switch {
+			case errors.Is(err, ErrUnitRoleProtected):
+				return cn35wire.MarshalJSON(trainingError(
+					"无法待机", "当前设为队长或助战的同伴不能进入待机所。"))
+			case errors.Is(err, ErrUnitAlreadyWaiting):
+				return cn35wire.MarshalJSON(trainingError(
+					"无法待机", "所选同伴已在待机所中。"))
+			case errors.Is(err, ErrUnitNotOwned):
+				return cn35wire.MarshalJSON(trainingError(
+					"无法待机", "所选同伴不在当前账号同伴列表中。"))
+			}
+			return nil, err
+		}
+		return albumsMutationSuccess(dep, c, req, "albums_wait", unitIDs)
+	})
+}
+
+// albumsBackHandler GET|POST /albums/back?unit_ids[]=<id>...：将待机所同伴移回同伴列表。
+func albumsBackHandler(dep Deps) httpapi.Handler {
+	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
+		unitIDs, ok := collectUnitIDs(req)
+		c.Decoded = map[string]any{
+			"cn35": true, "uid": req.UserID, "endpoint": "albums_back",
+			"unit_ids": unitIDs,
+		}
+		if dep.UnitOps == nil || dep.Inventory == nil || dep.Catalog == nil {
+			return cn35wire.MarshalJSON(trainingError(
+				"功能未启用", "服务端未装配待机所写面。"))
+		}
+		if !ok {
+			return cn35wire.MarshalJSON(trainingError(
+				"参数非法", "未选择有效的待机同伴，请重新选择后再试。"))
+		}
+		if err := dep.UnitOps.BackUnits(req.UserID, unitIDs); err != nil {
+			switch {
+			case errors.Is(err, ErrUnitNotWaiting):
+				return cn35wire.MarshalJSON(trainingError(
+					"无法移回", "所选同伴当前不在待机所中。"))
+			case errors.Is(err, ErrUnitNotOwned):
+				return cn35wire.MarshalJSON(trainingError(
+					"无法移回", "所选同伴不在当前账号库存中。"))
+			}
+			return nil, err
+		}
+		return albumsMutationSuccess(dep, c, req, "albums_back", unitIDs)
 	})
 }
 

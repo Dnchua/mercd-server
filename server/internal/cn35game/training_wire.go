@@ -158,14 +158,14 @@ func unitGrowthUnsupportedHandler(dep Deps) httpapi.Handler {
 	}
 }
 
-// findUnitRecord 在会话账号库存中定位 unit_id。
+// findUnitRecord 在会话账号同行库存中定位活跃 unit_id（待机所同伴不参与训练/符文装备/觉醒书消耗）。
 func findUnitRecord(dep Deps, userID string, unitID int) (UnitRecord, bool, error) {
 	recs, err := dep.Inventory.Units(userID)
 	if err != nil {
 		return UnitRecord{}, false, fmt.Errorf("cn35 训练读取库存失败: %w", err)
 	}
 	for _, r := range recs {
-		if r.UnitID == unitID {
+		if r.UnitID == unitID && !r.Waiting {
 			return r, true, nil
 		}
 	}

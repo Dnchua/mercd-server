@@ -73,6 +73,8 @@ type docUnitOps struct{}
 func (docUnitOps) SetLeaderUnitID(string, int) error        { return errDocStub }
 func (docUnitOps) SetHelperUnitID(string, int) error        { return errDocStub }
 func (docUnitOps) SetUnitProtected(string, int, bool) error { return errDocStub }
+func (docUnitOps) WaitUnits(string, []int) error            { return errDocStub }
+func (docUnitOps) BackUnits(string, []int) error            { return errDocStub }
 
 type docMonsterOps struct{}
 

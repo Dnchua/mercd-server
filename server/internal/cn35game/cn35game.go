@@ -264,6 +264,10 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 		"CN 3.5.0 玩家救援写面", usersHelpHandler(dep))
 	register(http.MethodPost, "/users/help",
 		"CN 3.5.0 玩家救援写面 POST 形态", usersHelpHandler(dep))
+	register(http.MethodGet, "/users/check_ap",
+		"CN 3.5.0 AP 回复弹窗读面（Messages.cs ApHealButton → NoApModal）", usersCheckAPHandler(dep))
+	register(http.MethodPost, "/users/check_ap",
+		"CN 3.5.0 AP 回复弹窗读面 POST 形态", usersCheckAPHandler(dep))
 	// CN35-UI-RESTORE：活动页 id 列表。客户端 BasicParts(top_activity) 与
 	// CarouselBannerParts 都经 common.activityList 取键，再查 app_conf
 	// partials.CarouselBannerPartial.CarouselBanner.banners 取图。
@@ -356,6 +360,16 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 			albumUnitDetailHandler(dep))
 		register(http.MethodPost, "/albums/show_unit",
 			"CN 3.5.0 原服图鉴单位详情 POST 形态", albumUnitDetailHandler(dep))
+		register(http.MethodGet, "/albums/wait",
+			"CN 3.5.0 待机所移入（?unit_ids[]=，解除符文/魔宠/编队/保护）",
+			albumsWaitHandler(dep))
+		register(http.MethodPost, "/albums/wait",
+			"CN 3.5.0 待机所移入 POST 形态", albumsWaitHandler(dep))
+		register(http.MethodGet, "/albums/back",
+			"CN 3.5.0 待机所移回（?unit_ids[]=，恢复同伴列表）",
+			albumsBackHandler(dep))
+		register(http.MethodPost, "/albums/back",
+			"CN 3.5.0 待机所移回 POST 形态", albumsBackHandler(dep))
 		register(http.MethodGet, "/monster_albums/",
 			"CN 3.5.0 魔宠图鉴全目录（持有/未持有 hide 标记+详情入口）",
 			monsterAlbumsHandler(dep))
