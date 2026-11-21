@@ -85,4 +85,3 @@ func TestCN35SeedDB(t *testing.T) {
 		t.Fatalf("expected active resource config in seed db, err=%v cfg=%v", err, rcfg)
 	}
 }
-

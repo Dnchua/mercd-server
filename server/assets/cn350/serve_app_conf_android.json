@@ -7,7 +7,7 @@
     "pages": 242,
     "partials": 67
   },
-  "version": 201710121012,
+  "version": 201710121013,
   "bloodPercent": 0.3,
   "expires": [
     "albums",
@@ -32817,6 +32817,19 @@
             "activity_icon": "monster/monster_square_861",
             "activity_name": "「暴走魔宠活动！」",
             "activity_desc": "穆西穆 出现！",
+            "activity_time": "9月21日 10:00结束"
+          },
+          "banner_raid_info": {
+            "asset_name": "common/banner_event_s_170914",
+            "big_assetname": "common/banner_event_s_170914",
+            "OnClick": {
+              "method": "ShowPage",
+              "message": "name=RaidEventPage&method=Stack",
+              "seName": "sound/S-1"
+            },
+            "activity_icon": "monster/monster_square_861",
+            "activity_name": "「暴走魔宠活动说明！」",
+            "activity_desc": "查看暴走规则与击退奖励",
             "activity_time": "9月21日 10:00结束"
           },
           "banner_raid_pt": {

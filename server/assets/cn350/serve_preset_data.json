@@ -25,6 +25,18 @@
    "event_mode_released": false,
    "show_area_back_button": true,
    "weapon_effect_open": true,
+   "unit_upgrade_open": false,
+   "monster_evo_open": true,
+   "changeability_switch": true,
+   "skill_optimize": true,
+   "skill_select_all": true,
+   "use_scout_book_to_gacha": true,
+   "red_diamond_shop_v2": true,
+   "scount_exchange_enabled": true,
+   "scout_book_exchange_rate": {
+    "100015": 6,
+    "100011": 6
+   },
    "small_healer_value": 100,
    "max_guts_up_count": 30,
    "message_request_interval_sec": 60,

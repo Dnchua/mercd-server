@@ -214,8 +214,8 @@ func cn35RosterOpenAll(path, note string) error {
 			if v.Blocked || v.Rare < 1 || v.Rare > 5 {
 				continue
 			}
-			// 与发布校验同口径：无 memorial 数值配置的单位不入池。
-			if !cn35game.MemorialUnitConfigured(v.UnitID) {
+			// 与发布校验同口径：无行为数值配置（unit_overrides/unit_memorial 均无）的单位不入池。
+			if !cn35game.UnitBehaviorConfigured(v.UnitID) {
 				continue
 			}
 			enableIDs = append(enableIDs, v.UnitID)

@@ -1,0 +1,1121 @@
+{
+  "schemaVersion": 1,
+  "module": "M5",
+  "single_actor": true,
+  "implementation_ready": false,
+  "note": "对抗性审查修订版候选验收脚本（国服关闭潜能系统、引入融合宠全链路恢复、严格对齐客户端反编译交互树）。UI 选择器与 SQL 须在 T11/T12 实机校准和绑定。",
+  "flows": {
+    "unit": [
+      {
+        "op": "click",
+        "target": "nav.menu"
+      },
+      {
+        "op": "click",
+        "target": "units.menu.list"
+      },
+      {
+        "op": "visible",
+        "target": "unit.row.primary"
+      },
+      {
+        "op": "click",
+        "target": "unit.row.primary"
+      },
+      {
+        "op": "visible",
+        "target": "m5.unit.panel"
+      }
+    ],
+    "monster": [
+      {
+        "op": "click",
+        "target": "nav.menu"
+      },
+      {
+        "op": "click",
+        "target": "monsters.menu.list"
+      },
+      {
+        "op": "visible",
+        "target": "monster.row.primary"
+      },
+      {
+        "op": "click",
+        "target": "monster.row.primary"
+      },
+      {
+        "op": "visible",
+        "target": "m5.monster.panel"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "M501",
+      "title": "同伴面板基线与潜能关闭检查（unit_upgrade_open=false）",
+      "criteria": [
+        "M5-PROJECTION",
+        "M5-POTENTIAL-DISABLED"
+      ],
+      "depends_on": [],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_01_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_01_target}"
+          ],
+          "as": "m5_01_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "click",
+          "target": "units.menu.list"
+        },
+        {
+          "op": "request",
+          "path": "/user_units/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "click",
+          "target": "unit.row.primary"
+        },
+        {
+          "op": "visible",
+          "target": "m5.unit.panel"
+        },
+        {
+          "op": "absent",
+          "target": "m5.unit.upgrade"
+        },
+        {
+          "op": "text_equals",
+          "target": "m5.unit.hp",
+          "value": "${m5_01_hp_text}"
+        },
+        {
+          "op": "text_equals",
+          "target": "m5.unit.at",
+          "value": "${m5_01_at_text}"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_01_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_01_target}",
+            "${m5_01_before}",
+            "${m5_01_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M502",
+      "title": "融合蛋培育：MergeSelectCaseModal -> MergeEggUpModal (/user_monsters/evolve_egg)",
+      "criteria": [
+        "M5-FUSION-EGG-BOARD",
+        "M5-FUSION-EGG-EVOLVE"
+      ],
+      "depends_on": [
+        "M501"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_02_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m5_02_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "click",
+          "target": "monsters.menu.list"
+        },
+        {
+          "op": "visible",
+          "target": "m5.monster.merge_btn"
+        },
+        {
+          "op": "click",
+          "target": "m5.monster.merge_btn"
+        },
+        {
+          "op": "request",
+          "path": "/user_monsters/evolve_select_info",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.merge.select_egg_btn"
+        },
+        {
+          "op": "click",
+          "target": "m5.merge.select_egg_btn"
+        },
+        {
+          "op": "request",
+          "path": "/user_monsters/show_evolve_board",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.egg.modal"
+        },
+        {
+          "op": "click",
+          "target": "m5.egg.tier_btn"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m5.egg.execute_btn"
+        },
+        {
+          "op": "request",
+          "path": "/user_monsters/evolve_egg",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_02_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_02_before}",
+            "${m5_02_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M503",
+      "title": "魔宠融合与融合宠强化：/user_monsters/evolve (uuids=a|b&egg_item_id=) + /user_monsters/powerup (is_rare=1)",
+      "criteria": [
+        "M5-FUSION-MONSTER-EVOLVE",
+        "M5-RARE-MONSTER-POWERUP"
+      ],
+      "depends_on": [
+        "M502"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_03_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_03_base_uuid}"
+          ],
+          "as": "m5_03_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "click",
+          "target": "monsters.menu.list"
+        },
+        {
+          "op": "click",
+          "target": "m5.monster.merge_btn"
+        },
+        {
+          "op": "visible",
+          "target": "m5.merge.select_monster_btn"
+        },
+        {
+          "op": "click",
+          "target": "m5.merge.select_monster_btn"
+        },
+        {
+          "op": "click",
+          "target": "m5.merge.formula_monster_row"
+        },
+        {
+          "op": "request",
+          "path": "/user_monsters/evolve_monster_select_info",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.evolve.material"
+        },
+        {
+          "op": "click",
+          "target": "m5.evolve.material"
+        },
+        {
+          "op": "click",
+          "target": "m5.evolve.material_confirm"
+        },
+        {
+          "op": "visible",
+          "target": "m5.evolve.preview"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m5.evolve.submit"
+        },
+        {
+          "op": "request",
+          "path": "/user_monsters/evolve",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_03_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_03_base_uuid}",
+            "${m5_03_before}",
+            "${m5_03_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M504",
+      "title": "同伴告别：sellButton -> 待机所/告别模态点 noButton -> 选行 -> decidedButton -> /user_units/sell?ids[]=",
+      "criteria": [
+        "M5-UNIT-SELL"
+      ],
+      "depends_on": [
+        "M501"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_04_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_04_target}"
+          ],
+          "as": "m5_04_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "click",
+          "target": "units.menu.list"
+        },
+        {
+          "op": "click",
+          "target": "m5.unit.sell"
+        },
+        {
+          "op": "visible",
+          "target": "modal.no"
+        },
+        {
+          "op": "click",
+          "target": "modal.no"
+        },
+        {
+          "op": "click",
+          "target": "m5.unit.sell_target"
+        },
+        {
+          "op": "click",
+          "target": "m5.unit.sell_decided"
+        },
+        {
+          "op": "visible",
+          "target": "modal.yes"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/user_units/sell",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.unit.list"
+        },
+        {
+          "op": "absent",
+          "target": "m5.unit.sell_target"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_04_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_04_target}",
+            "${m5_04_before}",
+            "${m5_04_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M505",
+      "title": "魔宠告别：sellButton -> 选行 -> decidedButton -> /user_monsters/sell?uuids[]=",
+      "criteria": [
+        "M5-MONSTER-SELL"
+      ],
+      "depends_on": [
+        "M501"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_05_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_05_target}"
+          ],
+          "as": "m5_05_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "click",
+          "target": "monsters.menu.list"
+        },
+        {
+          "op": "click",
+          "target": "m5.monster.sell"
+        },
+        {
+          "op": "click",
+          "target": "m5.monster.sell_target"
+        },
+        {
+          "op": "click",
+          "target": "m5.monster.sell_decided"
+        },
+        {
+          "op": "visible",
+          "target": "modal.yes"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/user_monsters/sell",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.monster.list"
+        },
+        {
+          "op": "absent",
+          "target": "m5.monster.sell_target"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_05_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_05_target}",
+            "${m5_05_before}",
+            "${m5_05_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M506",
+      "title": "同伴进化：UserUnits -> evolutionButton -> UnitEvolutionModal -> /user_units/evolution?id=",
+      "criteria": [
+        "M5-UNIT-EVOLUTION"
+      ],
+      "depends_on": [
+        "M501"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_06_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_06_target}"
+          ],
+          "as": "m5_06_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "click",
+          "target": "units.menu.list"
+        },
+        {
+          "op": "click",
+          "target": "m5.unit.evolution_btn"
+        },
+        {
+          "op": "click",
+          "target": "m5.unit.evolutable_row"
+        },
+        {
+          "op": "visible",
+          "target": "m5.unit.evolution_modal"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m5.unit.evolution_submit"
+        },
+        {
+          "op": "request",
+          "path": "/user_units/evolution",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_06_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_06_target}",
+            "${m5_06_before}",
+            "${m5_06_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M507",
+      "title": "同伴能力互换：UserUnits -> changeAblityButton -> ChangeAbility 4 端点链路（不含潜能）",
+      "criteria": [
+        "M5-ABILITY-EXCHANGE"
+      ],
+      "depends_on": [
+        "M501"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_07_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_07_unit_a}",
+            "${m5_07_unit_b}"
+          ],
+          "as": "m5_07_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "click",
+          "target": "units.menu.list"
+        },
+        {
+          "op": "click",
+          "target": "m5.unit.ability"
+        },
+        {
+          "op": "request",
+          "path": "/unit_ability_exchange/get_unit_ability_exchange_info",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.ability.left_slot"
+        },
+        {
+          "op": "click",
+          "target": "m5.ability.left_slot"
+        },
+        {
+          "op": "request",
+          "path": "/unit_ability_exchange/select_unit",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "click",
+          "target": "m5.ability.target_a"
+        },
+        {
+          "op": "click",
+          "target": "m5.ability.right_slot"
+        },
+        {
+          "op": "request",
+          "path": "/unit_ability_exchange/select_unit",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "click",
+          "target": "m5.ability.target_b"
+        },
+        {
+          "op": "click",
+          "target": "m5.ability.preview"
+        },
+        {
+          "op": "request",
+          "path": "/unit_ability_exchange/get_unit_ability_exchange_result",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.ability.submit"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m5.ability.submit"
+        },
+        {
+          "op": "request",
+          "path": "/unit_ability_exchange/exchange_unit_ability",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_07_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_07_unit_a}",
+            "${m5_07_unit_b}",
+            "${m5_07_before}",
+            "${m5_07_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M508",
+      "title": "符文装备：独立预期的面板增益",
+      "criteria": [
+        "M5-RUNE-ON",
+        "M5-NO-DOUBLE-BUFF"
+      ],
+      "depends_on": [
+        "M507"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_08_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_08_target}"
+          ],
+          "as": "m5_08_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "click",
+          "target": "units.menu.skills"
+        },
+        {
+          "op": "visible",
+          "target": "skill.row.primary"
+        },
+        {
+          "op": "click",
+          "target": "skill.row.primary"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "click",
+          "target": "unit.row.primary"
+        },
+        {
+          "op": "visible",
+          "target": "skill.equip.confirm"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "skill.equip.confirm"
+        },
+        {
+          "op": "request",
+          "path": "/user_skills/set_all",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "flow": "unit"
+        },
+        {
+          "op": "text_equals",
+          "target": "m5.unit.at",
+          "value": "${m5_08_at_text}"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_08_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_08_target}",
+            "${m5_08_before}",
+            "${m5_08_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M509",
+      "title": "符文卸下：恢复基线，持久化装备关系解除",
+      "criteria": [
+        "M5-RUNE-OFF"
+      ],
+      "depends_on": [
+        "M508"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_09_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_09_target}"
+          ],
+          "as": "m5_09_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "flow": "unit"
+        },
+        {
+          "op": "click",
+          "target": "m5.unit.rune_slot"
+        },
+        {
+          "op": "visible",
+          "target": "m5.rune.off"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m5.rune.off"
+        },
+        {
+          "op": "request",
+          "path": "/user_skills/off",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.unit.panel"
+        },
+        {
+          "op": "text_equals",
+          "target": "m5.unit.at",
+          "value": "${m5_09_at_text}"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_09_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_09_target}",
+            "${m5_09_before}",
+            "${m5_09_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M510",
+      "title": "固定关卡胜利：SP/召唤/Guts/种子技（含融合宠）与一次结算",
+      "criteria": [
+        "M5-BATTLE-CONSUME",
+        "M5-WIN-SETTLEMENT"
+      ],
+      "depends_on": [
+        "M509",
+        "M503"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_10_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_10_target}"
+          ],
+          "as": "m5_10_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.home"
+        },
+        {
+          "op": "click",
+          "target": "m5.quest.entry"
+        },
+        {
+          "op": "click",
+          "target": "m5.quest.target"
+        },
+        {
+          "op": "visible",
+          "target": "m5.quest.start"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m5.quest.start"
+        },
+        {
+          "op": "request",
+          "path": "${m5_10_execute_path}",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "request",
+          "path": "${m5_10_ap_path}",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.battle.hud"
+        },
+        {
+          "op": "text_equals",
+          "target": "m5.battle.sp",
+          "value": "${m5_10_initial_sp_text}"
+        },
+        {
+          "op": "click",
+          "target": "m5.battle.unit"
+        },
+        {
+          "op": "visible",
+          "target": "m5.battle.guts"
+        },
+        {
+          "op": "click",
+          "target": "m5.battle.guts"
+        },
+        {
+          "op": "click",
+          "target": "m5.battle.seed"
+        },
+        {
+          "op": "wait",
+          "seconds": 30
+        },
+        {
+          "op": "visible",
+          "target": "m5.battle.win"
+        },
+        {
+          "op": "click",
+          "target": "m5.battle.finish"
+        },
+        {
+          "op": "request",
+          "path": "${m5_10_result_path}",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.quest.result"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_10_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_10_target}",
+            "${m5_10_before}",
+            "${m5_10_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M511",
+      "title": "败北/撤退：扣点与失败结算不重复发奖",
+      "criteria": [
+        "M5-LOSE-SETTLEMENT"
+      ],
+      "depends_on": [
+        "M510"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_11_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_11_target}"
+          ],
+          "as": "m5_11_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.home"
+        },
+        {
+          "op": "click",
+          "target": "m5.quest.entry"
+        },
+        {
+          "op": "click",
+          "target": "m5.quest.target"
+        },
+        {
+          "op": "visible",
+          "target": "m5.quest.start"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m5.quest.start"
+        },
+        {
+          "op": "request",
+          "path": "${m5_11_execute_path}",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "request",
+          "path": "${m5_11_ap_path}",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.battle.hud"
+        },
+        {
+          "op": "click",
+          "target": "m5.battle.pause"
+        },
+        {
+          "op": "click",
+          "target": "m5.battle.retreat"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "${m5_11_lose_path}",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m5.quest.result"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_11_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_11_target}",
+            "${m5_11_before}",
+            "${m5_11_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M512",
+      "title": "同库重启：融合宠/告别/同伴进化/能力互换/符文/战斗状态持久化保留",
+      "criteria": [
+        "M5-PERSISTENCE",
+        "M5-CACHE-RELOAD"
+      ],
+      "depends_on": [
+        "M503",
+        "M504",
+        "M505",
+        "M506",
+        "M507",
+        "M509",
+        "M511"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m5_12_snapshot_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_12_target}"
+          ],
+          "as": "m5_12_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "server",
+          "action": "restart_same_state"
+        },
+        {
+          "op": "restart_app",
+          "role": "A"
+        },
+        {
+          "op": "click",
+          "target": "login.start"
+        },
+        {
+          "op": "request",
+          "path": "/preset_data",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "flow": "unit"
+        },
+        {
+          "op": "text_equals",
+          "target": "m5.unit.at",
+          "value": "${m5_12_at_text}"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m5_12_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m5_12_target}",
+            "${m5_12_before}",
+            "${m5_12_expected_json}"
+          ],
+          "expected": 1
+        }
+      ]
+    }
+  ]
+}

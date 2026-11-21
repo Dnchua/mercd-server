@@ -12,6 +12,9 @@ var ErrDailyShopClaimed = errors.New("cn35game: 今日已领取")
 // ErrDailyShopGoodsNotFound 商品 id 不在每日商店目录。
 var ErrDailyShopGoodsNotFound = errors.New("cn35game: 商品不存在")
 
+// ErrDailyShopInsufficientCoin 兑换契约书时钻石余额不足。
+var ErrDailyShopInsufficientCoin = errors.New("cn35game: 钻石不足")
+
 // DailyShopRules 每日免费商品占位常量（数值口径与 GuildRules 一致，
 // 后期由数值 agent 统一调整）。
 var DailyShopRules = struct {
@@ -38,11 +41,29 @@ var DailyShopRules = struct {
 	RefreshHour: 4,
 }
 
-// DailyShopStore 每日商店读面 + 领取写面。
+// ScoutBookShopRule 面包店常驻栏（red_diamond_shop_fixed）骑士契约书兑换规则。
+var ScoutBookShopRule = struct {
+	GoodsID     int
+	Name        string
+	Description string
+	DiamondCost int64
+	MaxBatch    int
+}{
+	GoodsID:     10000,
+	Name:        "骑士契约书",
+	Description: "必签HR(★3)以上同伴，十连契约享9折优惠（仅需9本）",
+	DiamondCost: 5,
+	MaxBatch:    999,
+}
+
+// DailyShopStore 每日商店读面 + 领取/兑换写面。
 type DailyShopStore interface {
 	// DailyShopClaims 该周期内各 goods_key 已领次数（无记录=空集）。
 	DailyShopClaims(userID, periodKey string) (map[string]int, error)
 	// ClaimDailyPack 单事务：领取计数+1（条件 UPDATE 限 limit/周期）→
 	// coin 入账；超限 → ErrDailyShopClaimed。返回入账后 coin 余额。
 	ClaimDailyPack(userID, goodsKey, periodKey string, coin int64, limit int) (int64, error)
+	// BuyScoutBook 单事务：条件扣除 count * unitDiamondCost 钻石并入账
+	// count 本骑士契约书（scout_book_1），返回更新后的 (coin, scoutBook1)。
+	BuyScoutBook(userID string, count, unitDiamondCost int64) (coinAfter, bookAfter int64, err error)
 }

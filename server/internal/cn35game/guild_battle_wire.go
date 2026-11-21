@@ -477,6 +477,7 @@ func buildGWExecuteDoc(dep Deps, atk *GWAttack, units []UnitRecord,
 	if err != nil {
 		return nil, err
 	}
+	fateEntries := fateEntriesFor(dep, atk.UserID)
 	unitDocs := make([]any, 0, len(units))
 	for _, r := range units {
 		cu, err := dep.Catalog.Unit(r.UnitID)
@@ -487,12 +488,22 @@ func buildGWExecuteDoc(dep Deps, atk *GWAttack, units []UnitRecord,
 		if err != nil {
 			return nil, err
 		}
+		baseHP, _ := udoc["hp"].(int)
+		baseAT, _ := udoc["at"].(int)
 		applyUnitSkills(udoc, cu.Rare, r.DuplicatedCount, skillsByUnit[r.UnitID])
-		if atk.Effects.Version > 0 {
+		ApplyUnitFateBuffs(udoc, cu.Element, fateEntries)
+		if atk.Effects.Version == 1 {
 			udoc["hp"] = int(float64(udoc["hp"].(int)) * atk.Effects.UnitHP)
 			udoc["at"] = int(float64(udoc["at"].(int)) * atk.Effects.UnitAT)
 			if toughness, ok := udoc["taghness"].(float64); ok {
 				udoc["taghness"] = toughness * atk.Effects.UnitToughness
+			}
+		} else if atk.Effects.Version >= 2 {
+			if atk.Effects.UnitHP > 1 {
+				udoc["hp"] = int(docF(udoc, "hp", 0)) + int(math.Round(float64(baseHP)*(atk.Effects.UnitHP-1)))
+			}
+			if atk.Effects.UnitAT > 1 {
+				udoc["at"] = int(docF(udoc, "at", 0)) + int(math.Round(float64(baseAT)*(atk.Effects.UnitAT-1)))
 			}
 		}
 		unitDocs = append(unitDocs, udoc)
@@ -607,12 +618,20 @@ func buildGWExecuteDoc(dep Deps, atk *GWAttack, units []UnitRecord,
 	callQuery := "?guild_id=" + url.QueryEscape(atk.TargetGuildID) +
 		"&difficulty_id=" + url.QueryEscape(atk.Difficulty) +
 		"&bid=" + url.QueryEscape(bid)
+	mainChar := cat.Defaults.MainCharacter
+	if atk.Effects.Version >= 2 {
+		mainChar = CloneMainCharacterWithBuff(cat.Defaults.MainCharacter, atk.Effects.MainHPBonus)
+	}
+	helpBase := gwGuildAssetHelpLevelBase
+	if atk.Effects.Version >= 2 && atk.Effects.HelpLevelBase > 0 {
+		helpBase = atk.Effects.HelpLevelBase
+	}
 	return map[string]any{
 		"user":              snap.User,
 		"quest":             questDoc,
 		"units":             unitDocs,
 		"monsters":          monsters,
-		"main_character":    cat.Defaults.MainCharacter,
+		"main_character":    mainChar,
 		"appear_table":      appearTable,
 		"boss_appear_table": bossAppearTable,
 		"help_table":        helpTable,
@@ -628,9 +647,9 @@ func buildGWExecuteDoc(dep Deps, atk *GWAttack, units []UnitRecord,
 		"rush_started":                nil,
 		"rush_ended":                  nil,
 		"seed_attribute_rates":        gwSeedAttributeRatesDoc(),
-		"guild_asset_help_level_base": gwGuildAssetHelpLevelBase,
+		"guild_asset_help_level_base": helpBase,
 		"battle_rank_help_level_rate": gwBattleRankHelpLevelRate,
-		"battle_help_initial_level":   gwGuildAssetHelpLevelBase * gwBattleRankHelpLevelRate,
+		"battle_help_initial_level":   helpBase * gwBattleRankHelpLevelRate,
 		"ap_use_url":                  "/battles/bp_use" + callQuery,
 		"result_url":                  "/battles/attack" + callQuery,
 		// lose_url：原服 guild battle 的 execute 不回该键（客户端 SyncResultToServer

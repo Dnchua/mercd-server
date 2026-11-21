@@ -414,7 +414,7 @@ func TestGuildBPStorageConcurrentSharedPool(t *testing.T) {
 //
 // 原服补给来源未证（证据 §5.2 / 缺口 G2），因此重建规则明确为：
 //   - 蓄水库**无行即 0**，新建公会不注入任何 BP；
-//   - 容量由设施等级推导：Lv.1 → round100(620×1) = 600；
+//   - 容量由设施等级推导：Lv.1 → 9500 + 500×1 = 10000；
 //   - 取出门禁因此为「不可取」，直到有来源（测试/运维用 deposit 原语注入）。
 //
 // 这条测试把「没有编造的初始补给」变成可执行断言：谁要改初始量，必须先过这里。
@@ -430,7 +430,7 @@ func TestGuildBPStorageFreshGuildInitialState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Level != 1 || st.Capacity != 600 || st.Amount != 0 || st.Ratio != 0 {
+	if st.Level != 1 || st.Capacity != 10000 || st.Amount != 0 || st.Ratio != 0 {
 		t.Fatalf("新建公会蓄水库初值不符: %+v", st)
 	}
 	if canTake {
@@ -618,6 +618,27 @@ func TestGuildEquipAnchorProjection(t *testing.T) {
 		if _, ok := view.Equipments[tid]; !ok {
 			t.Fatalf("缺 %s", tid)
 		}
+	}
+	// 图 1 / 图 2 双锚点（Lv.90/96/100/101）与 Lv.120 封顶校验。
+	if v, _, _ := cn35game.GuildEquipValue("sp", 100); v != 2500 {
+		t.Fatalf("sp Lv.100 = %v want 2500", v)
+	}
+	if v, _, _ := cn35game.GuildEquipValue("hp", 100); v != 25 {
+		t.Fatalf("hp Lv.100 = %v want 25", v)
+	}
+	if v, _, _ := cn35game.GuildEquipValue("at", 101); v != 25.25 {
+		t.Fatalf("at Lv.101 = %v want 25.25", v)
+	}
+	if v, v2, has2 := cn35game.GuildEquipValue("taghness", 90); v != 36000 || v2 != 4 || !has2 {
+		t.Fatalf("taghness Lv.90 = (%v, %v, %v) want (36000, 4, true)", v, v2, has2)
+	}
+	if v, v2, has2 := cn35game.GuildEquipValue("bp_storage", 96); v != 57500 || v2 != 0.69 || !has2 {
+		t.Fatalf("bp_storage Lv.96 = (%v, %v, %v) want (57500, 0.69, true)", v, v2, has2)
+	} else if eff := cn35game.GuildEquipEffect("bp_storage", 96, v, v2); eff != "蓄水上限 57500 BP\n蓄水库 69.00%" {
+		t.Fatalf("bp_storage Lv.96 effect = %q", eff)
+	}
+	if v, v2, has2 := cn35game.GuildEquipValue("bp_storage", 120); v != 69500 || v2 != 0.738 || !has2 {
+		t.Fatalf("bp_storage Lv.120 = (%v, %v, %v) want (69500, 0.738, true)", v, v2, has2)
 	}
 }
 

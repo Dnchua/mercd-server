@@ -122,20 +122,18 @@ func registerModuleRequireData(register func(method, path, note string, handler 
 		reg("/user_items/", "CN 3.5.0 道具列表（UserItems.user_items / UserItemsV2.user_items_hash；空态）",
 			"user_items", []string{"user_items", "user_items_hash"}, nil)
 	}
-	// /chapters/ 已由故事阅读实现真实读面（cn35game.go 故事块；设计
-	// notes/proposed/2026-09-28-cn35-story-reader.md），不在此空态表。
-	// /chapters/list 服务 ≥210 路径（game_server_version≥210 时 Menu 走
-	// ChaptersAndStories；当前 preset 为 0 走旧路径 Chapters）——保持空态。
-	reg("/chapters/list", "CN 3.5.0 章节+故事目录（ChaptersAndStories ≥210 路径 requireData.chapters/stories；空态）",
-		"chapters_list", []string{"chapters", "stories"}, nil)
+	// /chapters/ 与 /chapters/list 已由 story_wire.go 提供真实章节/故事读面
+	// （在 cn35game.go 故事块统一注册），此处不再占位空态。
 
 	// ---- 抽卡（FooterParts→Gacha、Menu 活动横幅 partial）----
 	// country_pick_page 为对象键（choose_attr_page 先例同形下发）。
-	reg("/gachas/choose_country_only_page/", "CN 3.5.0 属国单抽选页（Menu/PickupScoutPage requireData.country_pick_page；空态）",
-		"gachas_choose_country_only_page", nil, []string{"country_pick_page"})
-	// 票券列表（UserItemsV2 副键；本期无票券域 → 空）。
-	reg("/gachas/ticket_available_list", "CN 3.5.0 可用票券（UserItemsV2 requireData.ticket_available_list；空态）",
-		"gachas_ticket_available_list", []string{"ticket_available_list"}, nil)
+	if dep.Gacha == nil {
+		reg("/gachas/choose_country_only_page/", "CN 3.5.0 属国单抽选页（Menu/PickupScoutPage requireData.country_pick_page；空态）",
+			"gachas_choose_country_only_page", nil, []string{"country_pick_page"})
+		// 票券列表（UserItemsV2 副键；未装配 Gacha → 空）。
+		reg("/gachas/ticket_available_list", "CN 3.5.0 可用票券（UserItemsV2 requireData.ticket_available_list；空态）",
+			"gachas_ticket_available_list", []string{"ticket_available_list"}, nil)
+	}
 
 	// ---- UI-WALKTHROUGH-20260927 §二批：剩余 requireData 缺口全覆盖 ----
 	// 实机证据：2026-09-28 魔宠列表因 /user_monsters/evolve_select_info
@@ -153,6 +151,19 @@ func registerModuleRequireData(register func(method, path, note string, handler 
 	//   - /help.json.encode 为静态文件路径（static_file 加载通道），
 	//     与游戏接口加密通道不同，未注册——帮助页进入仍为已知缺口。
 	for _, e := range requireDataSweepTable {
+		// M7 每日轮换特殊招募：装配 Gacha 时下列精确路径走 special_scout_wire.go 真实读面，
+		// 保留 discount_gacha 与 show_choice_list 继续走空态兜底。
+		if dep.Gacha != nil {
+			switch e.path {
+			case "/gachas/attr_gacha",
+				"/gachas/available_unit_list",
+				"/gachas/dia_only_gacha/",
+				"/gachas/pickup_gacha/",
+				"/gachas/show/",
+				"/gachas/weapon_gacha/":
+				continue
+			}
+		}
 		// ITEM350-07：装配 Medal+Items 时 /medal_items/ 走真实商品读面。
 		if e.path == "/medal_items/" && dep.Medal != nil && dep.Items != nil {
 			continue
@@ -168,13 +179,29 @@ func registerModuleRequireData(register func(method, path, note string, handler 
 		if dep.Signin != nil && e.path == "/accu_login_activity/" {
 			continue
 		}
-		// SHOP350-01：装配 DailyShop 时 /red_diamond_shop/ 走真实商品读面，
-		// /users/function_portal 走主人公日常入口真实读面。
-		if dep.DailyShop != nil &&
-			(e.path == "/red_diamond_shop/" || e.path == "/users/function_portal") {
+		// SHOP350-01 / FATE350-02：装配 DailyShop 时 /red_diamond_shop/ 走真实商品读面，
+		// 装配 DailyShop 或 Fate 时 /users/function_portal 走主人公日常入口真实读面。
+		if dep.DailyShop != nil && e.path == "/red_diamond_shop/" {
+			continue
+		}
+		if (dep.DailyShop != nil || dep.Fate != nil || dep.PvP != nil) && e.path == "/users/function_portal" {
+			continue
+		}
+		// FATE350-02：装配 Fate 时命运星盘读面走真实 handler。
+		if dep.Fate != nil && (e.path == "/fate/show" || e.path == "/fate/fate_buff_summary") {
+			continue
+		}
+		// FRIEND350-02：装配 Friends 时好友列表/申请列表/徽章礼盒走真实 handler。
+		if dep.Friends != nil && (e.path == "/friends/index" ||
+			e.path == "/friends/friend_apply_list" ||
+			e.path == "/friends/show_friend_medal_list") {
 			continue
 		}
 		if e.path == "/user_monsters/evolve_select_info" {
+			continue
+		}
+		if dep.UnitOps != nil && (e.path == "/unit_ability_exchange/get_unit_ability_exchange_info" ||
+			e.path == "/unit_ability_exchange/select_unit") {
 			continue
 		}
 		// GUILD350：装配 Guild 时公会域/排名/waiting_users 走真实端点。
@@ -193,6 +220,12 @@ func registerModuleRequireData(register func(method, path, note string, handler 
 				"/guild_rankings/item_rewards", "/guild_rankings/skill_rewards",
 				"/waiting_users", "/waiting_users/recruit",
 				"/battles/comments":
+				continue
+			}
+		}
+		if dep.Raid != nil {
+			switch e.path {
+			case "/raid_monsters/", "/raid_monsters/lv_bonus", "/raid_monsters/pt_bonus":
 				continue
 			}
 		}

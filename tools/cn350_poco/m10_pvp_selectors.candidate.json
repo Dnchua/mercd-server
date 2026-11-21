@@ -1,0 +1,386 @@
+{
+  "m10.nav.home": {
+    "selector": {
+      "attrs": {
+        "name": "HomeButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "m10.daily.icon": {
+    "selector": {
+      "attrs": {
+        "name": "MainCharaDailyIconParts"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "m10.daily.chara_buff_disabled": {
+    "selector": {
+      "attrs": {
+        "text": "真·男主光环"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "m10.portal.ladder": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RightListParts.*009$"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "m10.portal.rob": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RightListParts.*008$"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.main.title": {
+    "selector": {
+      "attrs": {
+        "text": "癒术士大赛"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.btn.challenge": {
+    "selector": {
+      "attrs": {
+        "name": "BattleButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.btn.defense": {
+    "selector": {
+      "attrs": {
+        "name": "DefenseButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.btn.rule": {
+    "selector": {
+      "attrs": {
+        "name": "RuleButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.btn.rank": {
+    "selector": {
+      "attrs": {
+        "name": "RankButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.btn.grow": {
+    "selector": {
+      "attrs": {
+        "name": "CloseButton1"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.defense.slot1": {
+    "selector": {
+      "attrs": {
+        "name": "001"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.defense.title": {
+    "selector": {
+      "attrs": {
+        "text": "设定防御魔宠"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.monster.first": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^MonsterListRow.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.challenger.title": {
+    "selector": {
+      "attrs": {
+        "text": "排名挑战"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.challenger.row.first": {
+    "selector": {
+      "attrs": {
+        "name": "001"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.challenger.fight": {
+    "selector": {
+      "attrs": {
+        "name": "fight_btn"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.select.normal": {
+    "selector": {
+      "attrs": {
+        "name": "normalButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "ladder.select.start": {
+    "selector": {
+      "attrs": {
+        "name": "StartButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "battle.result.clear": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^SWFQuestClear.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "battle.result.next": {
+    "selector": {
+      "attrs": {
+        "name": "NextButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "battle.result.score": {
+    "selector": {
+      "attrs": {
+        "name": "gpLabel"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "autobattle.result.clear": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^SWFAutoQuestClear.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "autobattle.result.lose": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^SWFAutoQuestLose.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "modal.ok": {
+    "selector": {
+      "attrs": {
+        "name": "OkButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "modal.body.no_count": {
+    "selector": {
+      "attrs": {
+        "textMatches": "今日挑战次数已用完.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "modal.body.deck_empty": {
+    "selector": {
+      "attrs": {
+        "text": "至少要设置一只防御魔宠才可以发起战斗哟"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "grow.tab.hp": {
+    "selector": {
+      "attrs": {
+        "name": "Tab1"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "grow.row1.levelup": {
+    "selector": {
+      "attrs": {
+        "name": "LevelUpButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "grow.modal.up": {
+    "selector": {
+      "attrs": {
+        "name": "UpButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "grow.modal.confirm": {
+    "selector": {
+      "attrs": {
+        "name": "NumSelectExecuteButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "grow.reset": {
+    "selector": {
+      "attrs": {
+        "name": "ResetButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rank.list.first": {
+    "selector": {
+      "attrs": {
+        "name": "000"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rank.get_btn.hidden": {
+    "selector": {
+      "attrs": {
+        "name": "getBtn"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.main.title": {
+    "selector": {
+      "attrs": {
+        "text": "公会训练"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.enter1": {
+    "selector": {
+      "attrs": {
+        "name": "EnterBtn1"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.tab.defence": {
+    "selector": {
+      "attrs": {
+        "name": "DefenceBtn"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.tab.record": {
+    "selector": {
+      "attrs": {
+        "name": "RecordBtn"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.deck.slot1": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RobBattleUnitListRow.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.unit.first": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^UserUnitListRow.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.unit.heal3": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^UserUnitListRow.*heal.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "modal.body.career_limit": {
+    "selector": {
+      "attrs": {
+        "textMatches": ".*编入人数.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.challenger.title": {
+    "selector": {
+      "attrs": {
+        "text": "公会训练"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.challenger.row.first": {
+    "selector": {
+      "attrs": {
+        "name": "001"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.challenger.fight": {
+    "selector": {
+      "attrs": {
+        "name": "fight_btn"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.ready.enemy.first": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RobBattleEnemyUnitRectangleRow.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.ready.start": {
+    "selector": {
+      "attrs": {
+        "name": "StartButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rob.ready.reward": {
+    "selector": {
+      "attrs": {
+        "name": "rewardLabel"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  }
+}

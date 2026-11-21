@@ -58,7 +58,7 @@ func storyAssetsDir(t *testing.T) string {
 	return dir
 }
 
-// TestChaptersReal 章节读面：/chapters/ 返回 1 章，行内
+// TestChaptersReal 章节读面：/chapters/ 至少返回第 1 章，行内
 // chapter_select_option 携带 Stories 页深合并所需的 requireData/parts 键。
 func TestChaptersReal(t *testing.T) {
 	ts := storyServer(t, storyAssetsDir(t))
@@ -66,8 +66,8 @@ func TestChaptersReal(t *testing.T) {
 
 	data := gameData(t, ts.URL, "/chapters/", uid, sk, s0, s1, "")
 	chapters := docList(t, data, "chapters")
-	if len(chapters) != 1 {
-		t.Fatalf("首期应只有第 1 章: %v", chapters)
+	if len(chapters) < 1 {
+		t.Fatalf("应至少有第 1 章: %v", chapters)
 	}
 	ch := chapters[0].(map[string]any)
 	if ch["id"].(float64) != 1 || ch["name"] != "第1章" {
@@ -93,7 +93,7 @@ func TestChaptersReal(t *testing.T) {
 	}
 }
 
-// TestStoriesList /stories/list?chapter_id=1 → stories_1 十行按
+// TestStoriesList /stories/list?chapter_id=1 → stories_1 至少包含前 10 话并按
 // order_num 升序；additional_message 形态合法（&/= 不残留进 title）。
 func TestStoriesList(t *testing.T) {
 	ts := storyServer(t, storyAssetsDir(t))
@@ -101,17 +101,24 @@ func TestStoriesList(t *testing.T) {
 
 	data := gameData(t, ts.URL, "/stories/list", uid, sk, s0, s1, "chapter_id=1")
 	rows := docList(t, data, "stories_1")
-	if len(rows) != 10 {
-		t.Fatalf("stories_1 应 10 话: %d", len(rows))
+	if len(rows) < 10 {
+		t.Fatalf("stories_1 应至少 10 话: %d", len(rows))
 	}
 	msgRe := regexp.MustCompile(`^id=\d+&chapter_id=1(&title=[^&=]*)?$`)
-	for i, r := range rows {
+	prevOrder := 0
+	var row4 map[string]any
+	for _, r := range rows {
 		m := r.(map[string]any)
-		if m["order_num"].(float64) != float64(i+1) {
-			t.Fatalf("第 %d 行 order_num 应 %d: %v", i, i+1, m["order_num"])
+		order := int(m["order_num"].(float64))
+		if order <= prevOrder {
+			t.Fatalf("stories_1 未按 order_num 升序: prev=%d cur=%d", prevOrder, order)
 		}
-		if m["id"].(float64) != float64(i+1) || m["chapter_id"].(float64) != 1 {
-			t.Fatalf("行字段 id/chapter_id: %v", m)
+		prevOrder = order
+		if m["chapter_id"].(float64) != 1 {
+			t.Fatalf("行字段 chapter_id: %v", m)
+		}
+		if m["id"].(float64) == 4 {
+			row4 = m
 		}
 		if m["sub_story"] != false || m["unit_asset_name"] != "" {
 			t.Fatalf("sub_story/unit_asset_name 恒值: %v", m)
@@ -122,10 +129,12 @@ func TestStoriesList(t *testing.T) {
 		}
 	}
 	// story4「启程」带 title 参数：续读/标题栏依赖它。
-	m4 := rows[3].(map[string]any)
-	if !strings.Contains(m4["story_read_additional_message"].(string), "&title=启程") {
+	if row4 == nil {
+		t.Fatal("stories_1 缺少 id=4")
+	}
+	if !strings.Contains(row4["story_read_additional_message"].(string), "&title=启程") {
 		t.Fatalf("story4 additional_message 缺 title: %v",
-			m4["story_read_additional_message"])
+			row4["story_read_additional_message"])
 	}
 
 	// 非法/缺失 chapter_id → data.stories 空表；未知数字章 → stories_N 空表。
@@ -212,7 +221,10 @@ func TestStory54MemorialChapter2(t *testing.T) {
 	assetsDir := storyAssetsDir(t)
 	remoteDir := filepath.Join("..", "..", "server-state-cn35", "remote_assets")
 	if _, err := os.Stat(remoteDir); err != nil {
-		t.Skipf("remote_assets 目录不存在（非全量工作区）: %v", err)
+		remoteDir = filepath.Join("..", "..", "..", "inputs", "files")
+		if _, err2 := os.Stat(remoteDir); err2 != nil {
+			t.Skipf("remote_assets 与 inputs/files 目录均不存在（非全量工作区）: %v", err)
+		}
 	}
 	ra := cn35game.NewRemoteAssets(remoteDir, assetsDir, t.TempDir(), nil)
 	if err := ra.Scan(); err != nil {
@@ -238,25 +250,32 @@ func TestStory54MemorialChapter2(t *testing.T) {
 	t.Cleanup(ts.Close)
 	uid, sk, s0, s1 := establishSession(t, ts.URL, "dev-st-ch2")
 
-	// /chapters/ → 第 2 章入列（名字/背景沿用首期约定）。
+	// /chapters/ → 至少含第 1/2 章（全量提取时为 11 章）。
 	data := gameData(t, ts.URL, "/chapters/", uid, sk, s0, s1, "")
 	chapters := docList(t, data, "chapters")
-	if len(chapters) != 2 {
-		t.Fatalf("remote 装配后应 2 章: %v", chapters)
+	if len(chapters) < 2 {
+		t.Fatalf("remote 装配后应至少 2 章: %v", chapters)
 	}
 	ch2 := chapters[1].(map[string]any)
 	if ch2["id"].(float64) != 2 || ch2["name"] != "第2章" {
 		t.Fatalf("第 2 章字段: %v", ch2)
 	}
 
-	// /stories/list?chapter_id=2 → stories_2 单行 story54。
+	// /stories/list?chapter_id=2 → stories_2 包含 story54 行。
 	l := gameData(t, ts.URL, "/stories/list", uid, sk, s0, s1, "chapter_id=2")
 	rows := docList(t, l, "stories_2")
-	if len(rows) != 1 {
-		t.Fatalf("stories_2 应 1 行: %v", rows)
+	if len(rows) < 1 {
+		t.Fatalf("stories_2 应至少 1 行: %v", rows)
 	}
-	m := rows[0].(map[string]any)
-	if m["id"].(float64) != 54 || m["title"] != "图图的不适" {
+	var m map[string]any
+	for _, raw := range rows {
+		row := raw.(map[string]any)
+		if row["id"].(float64) == 54 {
+			m = row
+			break
+		}
+	}
+	if m == nil || m["title"] != "图图的不适" {
 		t.Fatalf("story54 行字段: %v", m)
 	}
 

@@ -21,6 +21,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,6 +55,30 @@ func battleBehaviorTable() *unitBattleBehaviorTable {
 		unitBattleBehaviorData = &t
 	})
 	return unitBattleBehaviorData
+}
+
+// UnitBehaviorConfigured 报告该单位是否有行为数值配置：官方样本
+// unit_overrides 命中（下发时优先级最高，见 applyUnitBattleBehavior a 层）
+// 或 unit_memorial 条目存在。卡池准入与发布校验用本口径——否则 8 个
+// 官方样本单位虽有真值行为仍会被"无 unit_memorial 条目"误挡在池外。
+func UnitBehaviorConfigured(unitID int) bool {
+	if _, ok := battleBehaviorTable().UnitOverrides[strconv.Itoa(unitID)]; ok {
+		return true
+	}
+	return MemorialUnitConfigured(unitID)
+}
+
+// OfficialSampleUnitIDs 返回 unit_overrides 官方样本单位 ID（升序）。
+func OfficialSampleUnitIDs() []int {
+	tbl := battleBehaviorTable()
+	ids := make([]int, 0, len(tbl.UnitOverrides))
+	for k := range tbl.UnitOverrides {
+		if id, err := strconv.Atoi(k); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	sort.Ints(ids)
+	return ids
 }
 
 // elementEffectName attr_id → 特效资源名段（target_effect 模板 {element} 占位）。

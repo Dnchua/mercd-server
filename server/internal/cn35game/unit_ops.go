@@ -30,6 +30,22 @@ var (
 	// ErrMonsterPowerupItem 强化素材与魔宠属性/体型档位不符
 	// （ScaleCategory：≤1.35 种子 / ≤1.55 花蕾 / ≤1.70 花）。
 	ErrMonsterPowerupItem = errors.New("cn35game: 强化素材与魔宠档位不符")
+	// ErrUnitSellProtected 同伴已锁定、担任队长/助战或不可出售。
+	ErrUnitSellProtected = errors.New("cn35game: 目标同伴已锁定、担任队长/助战或不可出售")
+	// ErrUnitSellMinKeep 出售后同行同伴数量不得少于 5 名（UnitButtonsListComponent.cs:646）。
+	ErrUnitSellMinKeep = errors.New("cn35game: 出售后同行同伴数量不得少于 5 名")
+	// ErrUnitEvolutionInvalid 目标同伴不可进化或等级未满足进化条件。
+	ErrUnitEvolutionInvalid = errors.New("cn35game: 目标同伴不可进化或未满足进化等级")
+	// ErrUnitEvolutionOwned 已持有进化后的目标同伴。
+	ErrUnitEvolutionOwned = errors.New("cn35game: 已持有进化后的目标同伴")
+	// ErrUnitExchangeInvalid 能力互换目标不合法或无等级/觉醒差异。
+	ErrUnitExchangeInvalid = errors.New("cn35game: 能力互换目标不合法或无等级/觉醒差异")
+	// ErrCurrencyInsufficient 金币或钻石余额不足。
+	ErrCurrencyInsufficient = errors.New("cn35game: 货币余额不足")
+	// ErrMonsterSellProtected 目标魔宠已锁定、已装备或处于公会防卫。
+	ErrMonsterSellProtected = errors.New("cn35game: 目标魔宠已锁定、已装备或处于公会防卫")
+	// ErrMonsterEvoInvalid 魔宠进化或融合参数/素材条件不满足。
+	ErrMonsterEvoInvalid = errors.New("cn35game: 魔宠进化或融合参数/素材条件不满足")
 )
 
 // UnitOpsStore 同伴写面。
@@ -49,6 +65,18 @@ type UnitOpsStore interface {
 	WaitUnits(userID string, unitIDs []int) error
 	// BackUnits 批量将待机所同伴召回同行列表（/albums/back）。
 	BackUnits(userID string, unitIDs []int) error
+	// SellUnits 批量出售同行同伴（/user_units/sell）：
+	// 同事务校验非队长/助战、未保护、出售后同行数 >= 5，自动卸下符文/魔宠、
+	// 清理编队槽位并入账 gacha_point。
+	SellUnits(userID string, unitIDs []int, prices map[int]int64) (int64, error)
+	// EvolveUnit 同伴进化（/user_units/evolution）：
+	// 同事务校验等级 >= reqBaseMaxLv、扣除进化素材、将 fromUnitID 进化为 toUnitID
+	// （level=1，duplicated_count 折半继承），并级联更新编队/队长/助战/魔宠/符文宿主。
+	EvolveUnit(userID string, fromUnitID, toUnitID, reqBaseMaxLv int, needItems map[string]int) (UnitRecord, UnitRecord, error)
+	// ExchangeUnitAbility 同伴能力互换（/unit_ability_exchange/exchange_unit_ability）：
+	// 同事务校验双方同行且存在等级或觉醒数差异，优先扣除 1 颗能力互换石（power_stone），
+	// 不足则扣除 10 钻（coin），互换双方 level 与 duplicated_count。
+	ExchangeUnitAbility(userID string, unitAID, unitBID int) (UnitRecord, UnitRecord, error)
 }
 
 // MonsterOpsStore 魔宠写面。装备关系在 monsters.unit_id 与
@@ -62,16 +90,17 @@ type MonsterOpsStore interface {
 	UnequipMonster(userID, uuid string, unitID int) error
 	// SetMonsterProtected 逐 uuid 写 protected；任一不属本账号整体回滚。
 	SetMonsterProtected(userID string, uuids []string, protected bool) error
-	// MonsterPowerup 魔宠强化（MonsterPowerupModal.cs:184 契约）：
-	// 消耗 powerup_item_id（素材 content_id）对应的背包素材，每次 1 件；
-	// real_scale += step×执行次数（step=普通 0.02 / 新魔宠 0.01）。
-	// attrID 为魔宠模板属性（1炎..5暗），素材 element 必须与之相等且
-	// form 必须等于当前体型档位（≤1.35 种子/≤1.55 花蕾/≤1.70 花），
-	// 不符 ErrMonsterPowerupItem；普通魔宠上限边界 1.70（id==4），
-	// 越界（如战斗掉落超限）ErrMonsterScaleCap，封顶前只执行/只扣
-	// 上限内步数（ChargedCount）；is_rare=1 拒绝 ErrMonsterRarePowerup；
-	// 物品不足 ErrItemInsufficient、目标非素材 ErrItemNotFound。
+	// MonsterPowerup 魔宠强化（MonsterPowerupModal.cs:184 契约）。
 	MonsterPowerup(userID, uuid string, attrID, powerupItemID, count int) (*MonsterPowerupResult, error)
+	// SellMonsters 批量出售魔宠（/user_monsters/sell）：
+	// 同事务校验未装备、未保护、非公会防卫魔宠，删除并入账 gacha_point。
+	SellMonsters(userID string, uuids []string, prices map[string]int64) (int64, error)
+	// EvolveEgg 提炼进化之卵（/user_monsters/evolve_egg）：
+	// 同事务消耗指定数量同属性 1★ 完全体魔宠 + 神秘水晶 + 金币，产出对应进化之卵。
+	EvolveEgg(userID string, attrID, consumeMonsterCount int, eligibleMonsterIDs map[int]bool) (int, []string, error)
+	// EvolveMonster 魔宠融合进化（/user_monsters/evolve）：
+	// 同事务消耗主魔宠 + 副素材魔宠 + 进化之卵 + 金币，生成目标融合 4★ 魔宠。
+	EvolveMonster(userID, mainUUID string, subUUIDs []string, eggItemID, targetMonsterID int, targetScaleLimit string, consumeGold int64, addFusionDegrees int) (MonsterRecord, error)
 }
 
 // MonsterPowerupResult 强化结果：写入后的 Size（十进制字符串与读面同形态）。

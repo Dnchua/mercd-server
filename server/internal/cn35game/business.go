@@ -128,6 +128,10 @@ func presetDataHandler(dep Deps) httpapi.Handler {
 		}
 		data["user"] = snap.User
 		data["user_coin"] = snap.UserCoin
+		data["user_red_coin"] = snap.UserCoin
+		if dep.Fate != nil {
+			data["function_portal"] = functionPortalDoc(dep, req.UserID)
+		}
 		// TASK350：tutorial_task_config 与 doing 列表联动（QuestTaskManager
 		// 要求两边任务数一致；客户端仅 task_v2 分支消费）。
 		data["tutorial_task_config"] = tutorialTaskConfigDocs()
@@ -187,11 +191,30 @@ func presetDataHandler(dep Deps) httpapi.Handler {
 			// 仍按本机时间选 fields 时窗，会与 battle_condition 打架（实机现象：
 			// 已进可战场次但主页显示「今日高挂免战牌」）。
 			now := time.Now().Unix()
-			if dep.GuildClock != nil {
+			if dep.SpecialScoutClock != nil {
+				now = dep.SpecialScoutClock().Unix()
+			} else if dep.GuildClock != nil {
 				now = dep.GuildClock().Unix()
 			}
 			consts["time"] = now
 			consts["stamp"] = now
+			// M5 T03/T07/T09：同伴潜能突破面板禁用（UserUnitDetail.cs:235），
+			// 开放魔宠融合按钮（MonsterButtonsListComponent.cs:356）与能力互换按钮
+			// （UnitButtonsListComponent.cs:488）。
+			consts["unit_upgrade_open"] = false
+			consts["monster_evo_open"] = true
+			consts["changeability_switch"] = true
+			consts["skill_optimize"] = true
+			consts["skill_select_all"] = true
+			// M8 E8：开放历史活动页签；试炼页签（协力入口）保持关闭（D6）。
+			if eventModeReleased(dep) {
+				consts["event_mode_released"] = true
+			}
+			consts["trials_mode_released"] = false
+			// M10：癒术士大赛难度文案与公会训练职业限制（原服 consts 原值）。
+			if dep.PvP != nil {
+				pvpInjectConsts(consts)
+			}
 			// GUILD350：会战难度行说明（BattleQuestSelectParts 读
 			// consts.battle_difficulty.<diff>.{interval,rate} 两个字符串
 			// 拼 "\n{interval}\nGP {rate}%"）。展示面；实际波次间隔与
@@ -210,6 +233,22 @@ func presetDataHandler(dep Deps) httpapi.Handler {
 					"rate":     GuildRules.DifficultyRateLabel["very_hard"],
 				},
 			}
+		}
+		// M5 T03/T07：下发融合宠强化体型档位配置（MonsterPowerupModal.cs:54 读
+		// cache.Get("rare_monster_category_config")，mlk 原服抓包 preset_data 同源），
+		// 并保持潜能只读空态。
+		data["rare_monster_category_config"] = rareMonsterCategoryConfigDocs()
+		if _, ok := data["user_passive_skills"]; !ok {
+			data["user_passive_skills"] = []any{}
+		}
+		if _, ok := data["unit_upgrade_config"]; !ok {
+			data["unit_upgrade_config"] = []any{}
+		}
+		if _, ok := data["passive_skill_config"]; !ok {
+			data["passive_skill_config"] = []any{}
+		}
+		if _, ok := data["upgrade_item_compose_config"]; !ok {
+			data["upgrade_item_compose_config"] = []any{}
 		}
 		// STAT350-03B：hardness 表默认不下发（保留客户端回退）；仅显式启用
 		// 重建测试 profile 时注入。表存在会关掉客户端已知回退（C0.4）。

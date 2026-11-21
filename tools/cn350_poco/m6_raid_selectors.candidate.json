@@ -1,0 +1,1235 @@
+{
+  "m6.activity.raid_info_entry": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^ActivityInfos_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "0005"
+        },
+        {
+          "name": "ReceiveButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/activity.tree.json",
+      "tree_sha256": "26fcda6de69c1466df66bf8fe853e313550bd52143f088911e1f0df06565b192"
+    }
+  },
+  "m6.battle.guts": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "L7_Line1"
+        },
+        {
+          "name": "Lifebar(Clone)"
+        },
+        {
+          "name": "Label"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/after_battle.tree.json",
+      "tree_sha256": "6fbc788a8ae1610636d9c4df87087242f7bda0357fd1f33231f2cd61c704bf82"
+    }
+  },
+  "m6.battle.hud": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "PowerPanel"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/battle.tree.json",
+      "tree_sha256": "a2a6aea2e0dc32eb4fd7be9f50745266836f57967de3903eb2c53c418076083d"
+    }
+  },
+  "m6.battle.lose": {
+    "selector": {
+      "attrs": {
+        "name": "SWFQuestLose(Clone)"
+      },
+      "offspring": [
+        {
+          "name": "Protect"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/after_help_close.tree.json",
+      "tree_sha256": "dfb2c67147c3a4a2294d28f70269b0aee0ed68ee8f7a1426e80986932882ac2c"
+    }
+  },
+  "m6.battle.result_panel": {
+    "selector": {
+      "attrs": {
+        "name": "SWFQuestClear(Clone)"
+      },
+      "offspring": [
+        {
+          "name": "New Game Object"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/quest_result_panel.tree.json",
+      "tree_sha256": "92cb756a08bd4a69950395131bf66f143f8832ec4d4de0afe5bdef1f10cad38f"
+    }
+  },
+  "m6.battle.sp": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "PowerPanel"
+        },
+        {
+          "name": "Label"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/battle.tree.json",
+      "tree_sha256": "a2a6aea2e0dc32eb4fd7be9f50745266836f57967de3903eb2c53c418076083d"
+    }
+  },
+  "m6.battle.unit1": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "UnitPanel"
+        },
+        {
+          "name": "Button1"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/battle.tree.json",
+      "tree_sha256": "a2a6aea2e0dc32eb4fd7be9f50745266836f57967de3903eb2c53c418076083d"
+    }
+  },
+  "m6.battle.unit2": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "UnitPanel"
+        },
+        {
+          "name": "Button2"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/battle.tree.json",
+      "tree_sha256": "a2a6aea2e0dc32eb4fd7be9f50745266836f57967de3903eb2c53c418076083d"
+    }
+  },
+  "m6.battle.unit3": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "UnitPanel"
+        },
+        {
+          "name": "Button3"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/battle.tree.json",
+      "tree_sha256": "a2a6aea2e0dc32eb4fd7be9f50745266836f57967de3903eb2c53c418076083d"
+    }
+  },
+  "m6.battle.unit4": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "UnitPanel"
+        },
+        {
+          "name": "Button4"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/battle.tree.json",
+      "tree_sha256": "a2a6aea2e0dc32eb4fd7be9f50745266836f57967de3903eb2c53c418076083d"
+    }
+  },
+  "m6.battle.unit5": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "UnitPanel"
+        },
+        {
+          "name": "Button5"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/battle.tree.json",
+      "tree_sha256": "a2a6aea2e0dc32eb4fd7be9f50745266836f57967de3903eb2c53c418076083d"
+    }
+  },
+  "m6.battle.win": {
+    "selector": {
+      "attrs": {
+        "name": "SWFQuestClear(Clone)"
+      },
+      "offspring": [
+        {
+          "name": "Protect"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/quest_clear.tree.json",
+      "tree_sha256": "81f850c32cf00dcf26a7e9815687d017c34375da67c45de73aafbca0e35ad3e9"
+    }
+  },
+  "m6.guild.facility_at_value": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GuildEquipmentScrollable2_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "001"
+        },
+        {
+          "name": "GuildEquipment4"
+        },
+        {
+          "name": "EffectLabel"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/guild_facility_p1.tree.json",
+      "tree_sha256": "0d4ab331eaef926229cc5d2553ab2cc3f5f6c921f1e99d7be1263aec413effcc"
+    }
+  },
+  "m6.guild.facility_entry": {
+    "selector": {
+      "attrs": {
+        "name": "AssetButton"
+      }
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/guild.tree.json",
+      "tree_sha256": "f0847ba44068c9a9c42b8103c31a851e844ba18e2576b0f0e3bf66a1b9218e45"
+    }
+  },
+  "m6.guild.facility_hp_value": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GuildEquipmentScrollable2_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "001"
+        },
+        {
+          "name": "GuildEquipment3"
+        },
+        {
+          "name": "EffectLabel"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/guild_facility_p1.tree.json",
+      "tree_sha256": "0d4ab331eaef926229cc5d2553ab2cc3f5f6c921f1e99d7be1263aec413effcc"
+    }
+  },
+  "m6.guild.facility_next_page": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GuildEquipmentScrollable2_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "RightArrowSprite"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/guild_facility_p1.tree.json",
+      "tree_sha256": "0d4ab331eaef926229cc5d2553ab2cc3f5f6c921f1e99d7be1263aec413effcc"
+    }
+  },
+  "m6.guild.facility_panel": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GuildEquipmentScrollable2_\\d+$"
+      }
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/guild_facility_p1.tree.json",
+      "tree_sha256": "0d4ab331eaef926229cc5d2553ab2cc3f5f6c921f1e99d7be1263aec413effcc"
+    }
+  },
+  "m6.guild.facility_sp_value": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GuildEquipmentScrollable2_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "001"
+        },
+        {
+          "name": "GuildEquipment2"
+        },
+        {
+          "name": "EffectLabel"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/guild_facility_p1.tree.json",
+      "tree_sha256": "0d4ab331eaef926229cc5d2553ab2cc3f5f6c921f1e99d7be1263aec413effcc"
+    }
+  },
+  "m6.guild.facility_storage_value": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GuildEquipmentScrollable2_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "002"
+        },
+        {
+          "name": "GuildEquipment2"
+        },
+        {
+          "name": "EffectLabel"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/guild_facility_p2.tree.json",
+      "tree_sha256": "ce6b51060d1d285130b1ad3d819a9a304d918f53ff8170a4665db38ac35c4a85"
+    }
+  },
+  "m6.guild.facility_toughness_value": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GuildEquipmentScrollable2_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "002"
+        },
+        {
+          "name": "GuildEquipment1"
+        },
+        {
+          "name": "EffectLabel"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/guild_facility_p2.tree.json",
+      "tree_sha256": "ce6b51060d1d285130b1ad3d819a9a304d918f53ff8170a4665db38ac35c4a85"
+    }
+  },
+  "m6.home.activity_btn": {
+    "selector": {
+      "attrs": {
+        "name": "IconActivityInfo"
+      },
+      "offspring": [
+        {
+          "name": "Button"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/home.tree.json",
+      "tree_sha256": "221f23f71d2c2d2a6b84ce1ee2ce49c6c374faee651d08543f34c22379f2e5b2"
+    }
+  },
+  "m6.home.activity_list": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^ActivityInfos_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "0002"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/activity.tree.json",
+      "tree_sha256": "26fcda6de69c1466df66bf8fe853e313550bd52143f088911e1f0df06565b192"
+    }
+  },
+  "m6.home.activity_pt_row": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^ActivityInfos_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "0006"
+        },
+        {
+          "name": "ReceiveButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_pt_exchange.tree.json",
+      "tree_sha256": "552c5f6b8d464a40ba5113ba0f9d3521c4061204322a21fc6d4a2184ea1f426d"
+    }
+  },
+  "m6.home.activity_raid_row": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^ActivityInfos_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "0004"
+        },
+        {
+          "name": "ReceiveButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/activity.tree.json",
+      "tree_sha256": "26fcda6de69c1466df66bf8fe853e313550bd52143f088911e1f0df06565b192"
+    }
+  },
+  "m6.quest.area_entry": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^StageSelect_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "0000"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/quest.tree.json",
+      "tree_sha256": "e89014fc15e9677a07a89563d2f7371f7e6d2afcfbcda6181518b1ee65426aca"
+    }
+  },
+  "m6.quest.entry": {
+    "selector": {
+      "attrs": {
+        "name": "Footer"
+      },
+      "offspring": [
+        {
+          "name": "QuestButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/home.tree.json",
+      "tree_sha256": "221f23f71d2c2d2a6b84ce1ee2ce49c6c374faee651d08543f34c22379f2e5b2"
+    }
+  },
+  "m6.quest.start": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^QuestSelect_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "StartButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/quest_select.tree.json",
+      "tree_sha256": "26828432f6dc388101024ec1389cb4893b41e970aeeff5c5056a9dc01eca7da1"
+    }
+  },
+  "m6.quest.target": {
+    "selector": {
+      "attrs": {
+        "name": "QuestGrid"
+      },
+      "offspring": [
+        {
+          "name": "99998"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/quest_list.tree.json",
+      "tree_sha256": "d90e81a33f2e41ec7b4c0d73691a944a5bf502e1b156e68c19c86ae520463f8a"
+    }
+  },
+  "m6.raid.appear_attack_btn": {
+    "selector": {
+      "attrs": {
+        "name": "RaidAppearModal(Clone)"
+      },
+      "offspring": [
+        {
+          "name": "RightButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_appear.tree.json",
+      "tree_sha256": "093880958b5e00163154613f3df5710f4cb95a0f5728620a96fc74de2f1a8003"
+    }
+  },
+  "m6.raid.appear_giveup_btn": {
+    "selector": {
+      "attrs": {
+        "name": "RaidAppearModal(Clone)"
+      },
+      "offspring": [
+        {
+          "name": "LeftButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_appear.tree.json",
+      "tree_sha256": "093880958b5e00163154613f3df5710f4cb95a0f5728620a96fc74de2f1a8003"
+    }
+  },
+  "m6.raid.appear_modal": {
+    "selector": {
+      "attrs": {
+        "name": "RaidAppearModal(Clone)"
+      }
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_appear.tree.json",
+      "tree_sha256": "093880958b5e00163154613f3df5710f4cb95a0f5728620a96fc74de2f1a8003"
+    }
+  },
+  "m6.raid.attack_btn": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "GiveupButton"
+        },
+        {
+          "name": "button2"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.battle_pause": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "MenuImageButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_battle.tree.json",
+      "tree_sha256": "8b4bc6878fe6be033315fe9b65dab730b4a609fba4200e6fe51a2135790fa7f1"
+    }
+  },
+  "m6.raid.battle_retreat": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "MenuPanel"
+        },
+        {
+          "name": "EscapeButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_pause.tree.json",
+      "tree_sha256": "9d595e7689fa8758b9ffbd45e1ceb41ef9dd47f13967650b5504ec34a1dde07f"
+    }
+  },
+  "m6.raid.boss_gauge": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Quest_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "MonsterPanel"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_battle.tree.json",
+      "tree_sha256": "8b4bc6878fe6be033315fe9b65dab730b4a609fba4200e6fe51a2135790fa7f1"
+    }
+  },
+  "m6.raid.diff_hard": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidQuestSelect_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "HardButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_select.tree.json",
+      "tree_sha256": "e484332632c7ff80894d86957e5fa8b49cc282947acd07d312dbdfe77461a425"
+    }
+  },
+  "m6.raid.diff_normal": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidQuestSelect_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "NormalButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_select.tree.json",
+      "tree_sha256": "e484332632c7ff80894d86957e5fa8b49cc282947acd07d312dbdfe77461a425"
+    }
+  },
+  "m6.raid.diff_very_hard": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidQuestSelect_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "VeryHardButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_select.tree.json",
+      "tree_sha256": "e484332632c7ff80894d86957e5fa8b49cc282947acd07d312dbdfe77461a425"
+    }
+  },
+  "m6.raid.giveup_btn": {
+    "selector": {
+      "attrs": {
+        "name": "${m6_raid_giveup_btn_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "Raid 主页 L5/MyRaid/Has/ButtonGiveUp「放走」按钮；须 inspect 后校准。"
+  },
+  "m6.raid.go_battle_btn": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidQuestSelect_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "StartButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_select.tree.json",
+      "tree_sha256": "e484332632c7ff80894d86957e5fa8b49cc282947acd07d312dbdfe77461a425"
+    }
+  },
+  "m6.raid.help_call_btn": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "ButtonHelpCall"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.help_close_btn": {
+    "selector": {
+      "attrs": {
+        "name": "RaidHelpModal"
+      },
+      "offspring": [
+        {
+          "name": "CloseButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/after_lose.tree.json",
+      "tree_sha256": "7892f2eb2d703170742d5cd0a765fe35a227426e08a1ad81e3c98e8963e863cb"
+    }
+  },
+  "m6.raid.help_community_btn": {
+    "selector": {
+      "attrs": {
+        "name": "RaidHelpModal"
+      },
+      "offspring": [
+        {
+          "name": "CommunityButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/after_lose.tree.json",
+      "tree_sha256": "7892f2eb2d703170742d5cd0a765fe35a227426e08a1ad81e3c98e8963e863cb"
+    }
+  },
+  "m6.raid.help_guild_btn": {
+    "selector": {
+      "attrs": {
+        "name": "RaidHelpModal"
+      },
+      "offspring": [
+        {
+          "name": "GuildButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/after_lose.tree.json",
+      "tree_sha256": "7892f2eb2d703170742d5cd0a765fe35a227426e08a1ad81e3c98e8963e863cb"
+    }
+  },
+  "m6.raid.help_modal": {
+    "selector": {
+      "attrs": {
+        "name": "RaidHelpModal"
+      }
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/after_lose.tree.json",
+      "tree_sha256": "7892f2eb2d703170742d5cd0a765fe35a227426e08a1ad81e3c98e8963e863cb"
+    }
+  },
+  "m6.raid.history_first_row": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "ListPanel"
+        },
+        {
+          "name": "000"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_history.tree.json",
+      "tree_sha256": "627572c3d7c0b41f49918fb3c1eca4539d2ea577e4b9f06fcfaea53e6d776408"
+    }
+  },
+  "m6.raid.initial_sp_label": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidQuestSelect_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "QuestLimitBase"
+        },
+        {
+          "name": "Label2"
+        },
+        {
+          "name": "ValueLabel"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_select.tree.json",
+      "tree_sha256": "e484332632c7ff80894d86957e5fa8b49cc282947acd07d312dbdfe77461a425"
+    }
+  },
+  "m6.raid.lv_bonus_entry": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidEventPage_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "lv_button"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_info_page.tree.json",
+      "tree_sha256": "f0a34aded72831d24b7b0681784c5c5c64ea385de885af31998e5e2539e80114"
+    }
+  },
+  "m6.raid.lv_bonus_panel": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidLvBonusPage_\\d+$"
+      }
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_lv_bonus.tree.json",
+      "tree_sha256": "e1b0ce66020bd01519cdd38fd442af3dd312d4f24cad497ced7d3f77df78bf8b"
+    }
+  },
+  "m6.raid.lv_text": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "Condition"
+        },
+        {
+          "name": "Lv"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.members_btn": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidQuestSelect_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "HelperButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_select.tree.json",
+      "tree_sha256": "e484332632c7ff80894d86957e5fa8b49cc282947acd07d312dbdfe77461a425"
+    }
+  },
+  "m6.raid.members_panel": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidMembers_\\d+$"
+      }
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_members.tree.json",
+      "tree_sha256": "ac7c8f177f73a468e1212ef72762cdf601546c0ff06e03e81868c25fb2b3f5ff"
+    }
+  },
+  "m6.raid.my_monster_hp": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "MyRaid"
+        },
+        {
+          "name": "Has"
+        },
+        {
+          "name": "Gauge"
+        },
+        {
+          "name": "ValueLabel"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.my_monster_panel": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "MyRaid"
+        },
+        {
+          "name": "Has"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.page": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      }
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.pt_exchange_buy_btn": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^ShowRaidPtExchange2_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "0000"
+        },
+        {
+          "name": "exchangebutton1"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/pt_exchange.tree.json",
+      "tree_sha256": "782943b48d0bb0a83437088418f177616c3b3197f24ac508d788f703eda01665"
+    }
+  },
+  "m6.raid.pt_exchange_confirm_btn": {
+    "selector": {
+      "attrs": {
+        "name": "ItemCountSelectFrameModal(Clone)"
+      },
+      "offspring": [
+        {
+          "name": "ConfirmButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/pt_exchange_check.png",
+      "tree_sha256": "d5a2bd77e0391b2f0fd851194efda29208a3bfda5689a5d1b722cbc2a13c4227"
+    }
+  },
+  "m6.raid.pt_exchange_panel": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^ShowRaidPtExchange2_\\d+$"
+      }
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_pt_exchange.tree.json",
+      "tree_sha256": "552c5f6b8d464a40ba5113ba0f9d3521c4061204322a21fc6d4a2184ea1f426d"
+    }
+  },
+  "m6.raid.pt_text": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "Condition"
+        },
+        {
+          "name": "Pt"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.reload_btn": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "ReloadButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.select_page": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidQuestSelect_\\d+$"
+      }
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_select.tree.json",
+      "tree_sha256": "e484332632c7ff80894d86957e5fa8b49cc282947acd07d312dbdfe77461a425"
+    }
+  },
+  "m6.raid.tab_community": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "IconTab2"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.tab_guild": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "IconTab1"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.tab_history": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Raid_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "IconTab3"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_main.tree.json",
+      "tree_sha256": "962ad5aca90a216d1e0d6b10f57e16a89c9316676117ec167be86560d160181b"
+    }
+  },
+  "m6.raid.weapon_rate_box": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RaidQuestSelect_\\d+$"
+      },
+      "offspring": [
+        {
+          "name": "WeaponAttrBase"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_select.tree.json",
+      "tree_sha256": "e484332632c7ff80894d86957e5fa8b49cc282947acd07d312dbdfe77461a425"
+    }
+  },
+  "nav.back": {
+    "selector": {
+      "attrs": {
+        "name": "Header"
+      },
+      "offspring": [
+        {
+          "name": "BackButton"
+        }
+      ]
+    },
+    "status": "device-calibrated",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_members.tree.json",
+      "tree_sha256": "ac7c8f177f73a468e1212ef72762cdf601546c0ff06e03e81868c25fb2b3f5ff"
+    }
+  }
+}

@@ -84,9 +84,27 @@ func dailyShopData(dep Deps, userID string, now time.Time) (map[string]any, erro
 	if err != nil {
 		return nil, err
 	}
+	sb := ScoutBookShopRule
+	fixed := []any{
+		map[string]any{
+			"id":            sb.GoodsID,
+			"type_id":       10003,
+			"type_name":     "scout_book",
+			"content_id":    1,
+			"count":         1,
+			"description":   sb.Description,
+			"name":          sb.Name,
+			"cost":          sb.DiamondCost,
+			"cost_type":     0,
+			"unlimited":     true,
+			"bought":        false,
+			"data_key":      "scout_book_1",
+			"sorting_order": 30,
+		},
+	}
 	return map[string]any{
 		"red_diamond_shop":       rows,
-		"red_diamond_shop_fixed": []any{},
+		"red_diamond_shop_fixed": fixed,
 		"red_diamond_shop_info": map[string]any{
 			"refresh_time":              dailyShopNextRefreshSec(now),
 			"refresh_cost_type":         0,
@@ -153,17 +171,16 @@ func functionPortalHandler(dep Deps) httpapi.Handler {
 		}
 		return cn35wire.MarshalJSON(map[string]any{
 			"data": map[string]any{
-				"function_portal": map[string]any{
-					"has_new_main_chara_daily":  false,
-					"chara_buff_button_key":     "真·男主光环",
-					"fate_button_key":           "艾琳的小屋",
-					"chara_buff_button_disable": false,
-					"fate_button_disable":       false,
-				},
+				"function_portal": functionPortalDoc(dep, req.UserID),
 				"function_portal_list": func() []any {
-					rows := make([]any, len(functionPortalList))
-					for i, r := range functionPortalList {
-						rows[i] = r
+					rows := make([]any, 0, len(functionPortalList)+2)
+					for _, r := range functionPortalList {
+						rows = append(rows, r)
+					}
+					if dep.PvP != nil && dep.Catalog != nil {
+						for _, r := range pvpPortalEntries() {
+							rows = append(rows, r)
+						}
 					}
 					return rows
 				}(),
@@ -207,29 +224,57 @@ func redDiamondShopBuyHandler(dep Deps) httpapi.Handler {
 			return cn35wire.MarshalJSON(map[string]any{
 				"result": false, "msg": msg})
 		}
-		if idErr != nil || cntErr != nil || goodsID != DailyShopRules.GoodsID ||
-			count < 0 || count > DailyShopRules.DailyLimit {
+		if idErr != nil || cntErr != nil {
 			return resultErr("商品参数无效。")
 		}
-		r := DailyShopRules
-		balance, err := dep.DailyShop.ClaimDailyPack(req.UserID, r.GoodsKey,
-			dailyShopPeriodKey(time.Now()), r.Coin, r.DailyLimit)
-		if err != nil {
-			switch {
-			case errors.Is(err, ErrDailyShopClaimed):
-				return resultErr("今日已领取，凌晨 4 点刷新后可再来。")
-			case errors.Is(err, ErrDailyShopGoodsNotFound):
-				return resultErr("该商品当前不可购买。")
-			case errors.Is(err, ErrInvalidRequest):
-				return resultErr("购买请求不合法。")
+		var balance int64
+		if goodsID == ScoutBookShopRule.GoodsID {
+			if countStr == "" {
+				count = 1
 			}
-			return nil, err
+			if count < 1 || count > ScoutBookShopRule.MaxBatch {
+				return resultErr("购买数量无效。")
+			}
+			coinAfter, bookAfter, berr := dep.DailyShop.BuyScoutBook(req.UserID, int64(count), ScoutBookShopRule.DiamondCost)
+			if berr != nil {
+				switch {
+				case errors.Is(berr, ErrDailyShopInsufficientCoin):
+					return resultErr("钻石不足，无法兑换骑士契约书。")
+				case errors.Is(berr, ErrInvalidRequest):
+					return resultErr("购买请求不合法。")
+				}
+				return nil, berr
+			}
+			balance = coinAfter
+			c.Decoded["scout_book_1"] = bookAfter
+		} else if goodsID == DailyShopRules.GoodsID {
+			if count < 0 || count > DailyShopRules.DailyLimit {
+				return resultErr("商品参数无效。")
+			}
+			r := DailyShopRules
+			var err error
+			balance, err = dep.DailyShop.ClaimDailyPack(req.UserID, r.GoodsKey,
+				dailyShopPeriodKey(time.Now()), r.Coin, r.DailyLimit)
+			if err != nil {
+				switch {
+				case errors.Is(err, ErrDailyShopClaimed):
+					return resultErr("今日已领取，凌晨 4 点刷新后可再来。")
+				case errors.Is(err, ErrDailyShopGoodsNotFound):
+					return resultErr("该商品当前不可购买。")
+				case errors.Is(err, ErrInvalidRequest):
+					return resultErr("购买请求不合法。")
+				}
+				return nil, err
+			}
+		} else {
+			return resultErr("商品参数无效。")
 		}
 		data, err := dailyShopData(dep, req.UserID, time.Now())
 		if err != nil {
 			return nil, err
 		}
 		data["user_coin"] = map[string]any{"amount": balance}
+		data["user_red_coin"] = map[string]any{"amount": balance}
 		snap, err := dep.Accounts.Snapshot(req.UserID)
 		if err != nil {
 			return nil, err

@@ -190,4 +190,3 @@ func TestRosterCatalogConcurrentReadWrite(t *testing.T) {
 		t.Fatalf("最终值应为 final: %q", u.Name)
 	}
 }
-

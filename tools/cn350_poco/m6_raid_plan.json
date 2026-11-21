@@ -1,0 +1,1179 @@
+{
+  "schemaVersion": 1,
+  "module": "M6",
+  "single_actor": true,
+  "implementation_ready": true,
+  "note": "M6 候选模拟器验收计划：覆盖 Bug1（公会设施 Lv.100+/蓄水库双锚点校验及日常战斗加成注入）与 暴走魔宠（首页活动快速跳转、遭遇强袭、出击、伤害上报、协力呼叫、击退、交换所及重启持久化）。未完成服务端改造与模拟器控件 inspect/calibrate 前禁止投入运行。",
+  "flows": {
+    "open_facility": [
+      {
+        "op": "click",
+        "target": "nav.guild"
+      },
+      {
+        "op": "click",
+        "target": "m6.guild.facility_entry"
+      },
+      {
+        "op": "visible",
+        "target": "m6.guild.facility_panel"
+      }
+    ],
+    "home_to_raid": [
+      {
+        "op": "click",
+        "target": "nav.home"
+      },
+      {
+        "op": "click",
+        "target": "m6.home.activity_btn"
+      },
+      {
+        "op": "wait",
+        "seconds": 1
+      },
+      {
+        "op": "swipe",
+        "target": "m6.home.activity_list",
+        "value": [
+          0,
+          -0.6
+        ]
+      },
+      {
+        "op": "wait",
+        "seconds": 1
+      },
+      {
+        "op": "click",
+        "target": "m6.home.activity_raid_row"
+      },
+      {
+        "op": "visible",
+        "target": "m6.raid.page"
+      }
+    ],
+    "start_daily_quest": [
+      {
+        "op": "click",
+        "target": "m6.quest.entry"
+      },
+      {
+        "op": "click",
+        "target": "m6.quest.area_entry"
+      },
+      {
+        "op": "click",
+        "target": "m6.quest.target"
+      },
+      {
+        "op": "click",
+        "target": "m6.quest.start"
+      },
+      {
+        "op": "visible",
+        "target": "m6.battle.hud"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "M601",
+      "title": "公会设施高等级（Lv.100+）与蓄水库双锚点数值校验",
+      "criteria": [
+        "M6-FACILITY-CAP-120",
+        "M6-FACILITY-STORAGE-FORMULA"
+      ],
+      "depends_on": [],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m6_01_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m6_01_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "flow": "open_facility",
+          "role": "A"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.guild.facility_sp_value",
+          "value": "${m6_01_sp_text}"
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.guild.facility_hp_value",
+          "value": "${m6_01_hp_text}"
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.guild.facility_at_value",
+          "value": "${m6_01_at_text}"
+        },
+        {
+          "op": "click",
+          "target": "m6.guild.facility_next_page"
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.guild.facility_toughness_value",
+          "value": "${m6_01_toughness_text}"
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.guild.facility_storage_value",
+          "value": "${m6_01_storage_text}"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m6_01_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m6_01_before}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M602",
+      "title": "公会设施加成带入日常探险战斗（SP/HP/AT/Guts）",
+      "criteria": [
+        "M6-DAILY-FACILITY-BUFF"
+      ],
+      "depends_on": [
+        "M601"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m6_02_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m6_02_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "flow": "start_daily_quest",
+          "role": "A"
+        },
+        {
+          "op": "request",
+          "path": "${m6_02_execute_path}",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "wait",
+          "seconds": 5
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.battle.sp",
+          "value": "${m6_02_battle_sp_text}"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit1"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.battle.guts",
+          "value": "${m6_02_battle_guts_text}"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit2"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit3"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit4"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit5"
+        },
+        {
+          "op": "wait",
+          "seconds": 30
+        },
+        {
+          "op": "visible",
+          "target": "m6.battle.win"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m6_02_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m6_02_before}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M603",
+      "title": "常规探险结算触发暴走魔宠强袭弹窗（RaidAppearModal）",
+      "criteria": [
+        "M6-RAID-SPAWN"
+      ],
+      "depends_on": [
+        "M602"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m6_03_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m6_03_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "wait",
+          "seconds": 5
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 7
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.appear_modal"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.appear_attack_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.page"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m6_03_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m6_03_before}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M604",
+      "title": "首页「活动」快速跳转暴走主页与三栏 Tab 读面检查",
+      "criteria": [
+        "M6-HOME-ACTIVITY-ENTRY",
+        "M6-RAID-HOME"
+      ],
+      "depends_on": [
+        "M603"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m6_04_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m6_04_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "flow": "home_to_raid",
+          "role": "A"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.my_monster_panel"
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.raid.lv_text",
+          "value": "${m6_04_raid_lv_text}"
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.raid.pt_text",
+          "value": "${m6_04_raid_pt_text}"
+        },
+        {
+          "op": "disabled",
+          "target": "m6.raid.help_call_btn"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.tab_guild"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.tab_community"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.tab_history"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.reload_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m6_04_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m6_04_before}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M605",
+      "title": "暴走魔宠出击准备页（急击/强击/猛击、武器倍率、保底 SP）",
+      "criteria": [
+        "M6-RAID-SHOW"
+      ],
+      "depends_on": [
+        "M604"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m6_05_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m6_05_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.attack_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/show",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.select_page"
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.diff_normal"
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.diff_hard"
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.diff_very_hard"
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.weapon_rate_box"
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.raid.initial_sp_label",
+          "value": "${m6_05_initial_sp_text}"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m6_05_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m6_05_before}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M606",
+      "title": "暴走战斗首刀削血与退场伤害上报（/raid_monsters/lose）",
+      "criteria": [
+        "M6-RAID-EXECUTE",
+        "M6-RAID-LOSE-DAMAGE"
+      ],
+      "depends_on": [
+        "M605"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m6_06_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m6_06_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.diff_normal"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.go_battle_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/execute.json",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/bp_use",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.boss_gauge"
+        },
+        {
+          "op": "wait",
+          "seconds": 8
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.boss_gauge"
+        },
+        {
+          "op": "wait",
+          "seconds": 6
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit1"
+        },
+        {
+          "op": "wait",
+          "seconds": 6
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.battle_pause"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.battle_retreat"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/lose",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.help_modal"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.help_close_btn"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.lose"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.my_monster_hp"
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.help_call_btn"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m6_06_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m6_06_before}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M607",
+      "title": "协力邀请双通道呼叫与协力者伤害榜（/call_help & /damage_list）",
+      "criteria": [
+        "M6-RAID-CALL-HELP",
+        "M6-RAID-DAMAGE-LIST"
+      ],
+      "depends_on": [
+        "M606"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m6_07_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m6_07_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.help_call_btn"
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.help_modal"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.help_guild_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/call_help",
+          "role": "A",
+          "timeout": 60,
+          "decoded": {
+            "help_type": "guild"
+          }
+        },
+        {
+          "op": "click",
+          "target": "modal.close"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.help_community_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/call_help",
+          "role": "A",
+          "timeout": 60,
+          "decoded": {
+            "help_type": "community_topic"
+          }
+        },
+        {
+          "op": "click",
+          "target": "modal.close"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.attack_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/show",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.members_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/damage_list",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.members_panel"
+        },
+        {
+          "op": "click",
+          "target": "nav.back"
+        },
+        {
+          "op": "click",
+          "target": "nav.back"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m6_07_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m6_07_before}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M608",
+      "title": "暴走最终击退结算（/result）、击退日志与 Lv 奖励页（/lv_bonus）",
+      "criteria": [
+        "M6-RAID-KILL-RESULT",
+        "M6-RAID-LV-BONUS"
+      ],
+      "depends_on": [
+        "M607"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m6_08_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m6_08_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.attack_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/show",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.diff_very_hard"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.go_battle_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/execute.json",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "wait",
+          "seconds": 8
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.boss_gauge"
+        },
+        {
+          "op": "wait",
+          "seconds": 6
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit1"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit2"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit3"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit4"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit5"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/result",
+          "role": "A",
+          "timeout": 90
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "visible",
+          "target": "m6.battle.win"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.tab_history"
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.history_first_row"
+        },
+        {
+          "op": "click",
+          "target": "nav.home"
+        },
+        {
+          "op": "wait",
+          "seconds": 3
+        },
+        {
+          "op": "click",
+          "target": "m6.home.activity_btn"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "swipe",
+          "target": "m6.home.activity_list",
+          "value": [
+            0,
+            -0.6
+          ]
+        },
+        {
+          "op": "wait",
+          "seconds": 1
+        },
+        {
+          "op": "click",
+          "target": "m6.activity.raid_info_entry"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.lv_bonus_entry"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/lv_bonus",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.lv_bonus_panel"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m6_08_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m6_08_before}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M609",
+      "title": "击退 pt 交换所兑换（/pt_bonus & /exchange）与放走暴走宠（/giveup）",
+      "criteria": [
+        "M6-RAID-PT-EXCHANGE",
+        "M6-RAID-GIVEUP"
+      ],
+      "depends_on": [
+        "M608"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m6_09_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m6_09_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.home"
+        },
+        {
+          "op": "wait",
+          "seconds": 3
+        },
+        {
+          "op": "click",
+          "target": "m6.home.activity_btn"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "swipe",
+          "target": "m6.home.activity_list",
+          "value": [
+            0,
+            -0.6
+          ]
+        },
+        {
+          "op": "wait",
+          "seconds": 1
+        },
+        {
+          "op": "click",
+          "target": "m6.home.activity_pt_row"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/pt_bonus",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.pt_exchange_panel"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.pt_exchange_buy_btn"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.pt_exchange_confirm_btn"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/exchange",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "modal.close"
+        },
+        {
+          "op": "click",
+          "target": "modal.close"
+        },
+        {
+          "flow": "start_daily_quest",
+          "role": "A"
+        },
+        {
+          "op": "wait",
+          "seconds": 5
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit1"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit2"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit3"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit4"
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.unit5"
+        },
+        {
+          "op": "wait",
+          "seconds": 30
+        },
+        {
+          "op": "visible",
+          "target": "m6.battle.win"
+        },
+        {
+          "op": "request",
+          "path": "/quests/result",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "wait",
+          "seconds": 5
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "click",
+          "target": "m6.battle.result_panel"
+        },
+        {
+          "op": "wait",
+          "seconds": 7
+        },
+        {
+          "op": "visible",
+          "target": "m6.raid.appear_modal"
+        },
+        {
+          "op": "click",
+          "target": "m6.raid.appear_giveup_btn"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/giveup",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m6_09_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m6_09_before}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M610",
+      "title": "同库重启一致性验收：公会设施、暴走 Lv/pt、交换库存与击退日志持久化",
+      "criteria": [
+        "M6-PERSISTENCE"
+      ],
+      "depends_on": [
+        "M601",
+        "M608",
+        "M609"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m6_10_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m6_10_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "server",
+          "action": "restart_same_state"
+        },
+        {
+          "op": "restart_app",
+          "role": "A"
+        },
+        {
+          "op": "wait",
+          "seconds": 8
+        },
+        {
+          "op": "click",
+          "target": "login.start"
+        },
+        {
+          "op": "request",
+          "path": "/infos/index",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "wait",
+          "seconds": 5
+        },
+        {
+          "flow": "home_to_raid",
+          "role": "A"
+        },
+        {
+          "op": "request",
+          "path": "/raid_monsters/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.raid.lv_text",
+          "value": "${m6_10_raid_lv_text}"
+        },
+        {
+          "op": "text_equals",
+          "target": "m6.raid.pt_text",
+          "value": "${m6_10_raid_pt_text}"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m6_10_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m6_10_before}"
+          ],
+          "expected": 1
+        }
+      ]
+    }
+  ]
+}

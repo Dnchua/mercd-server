@@ -105,9 +105,9 @@ func loginBonusSnapshot(dep Deps, req *cn35wire.GameRequest) (*PlayerSnapshot, e
 
 // loginBonusContents rows：客户端 foreach cache["temp_login_bonus"].docs("contents")。
 // type→UIUtil.IconAssetName 图标、count→掉落图标枚数（每 10 个一枚）、
-// message→清单行文案、rare_type_id→清单行稀有度。三种资源各一行。
+// message→清单行文案、rare_type_id→清单行稀有度。四类资源各一行。
 func loginBonusContents(res *SpringClaimResult) []any {
-	rows := make([]any, 0, 3)
+	rows := make([]any, 0, 4)
 	add := func(typ, name string, count int64) {
 		if count <= 0 {
 			return
@@ -122,6 +122,7 @@ func loginBonusContents(res *SpringClaimResult) []any {
 	add("gacha_point", "金币", res.Gold)
 	add("guild_asset", "公会建设素材", res.GuildAsset)
 	add("battle_point", "BP", res.BattlePoint)
+	add("medal", "徽章", res.Medal)
 	return rows
 }
 

@@ -71,7 +71,7 @@ func bpStorageStatusTx(tx *sql.Tx, guildID string) (*cn35game.GuildBPStorage, er
 // guildEquipmentsTx 组装公会六类设施读面投影（/guilds/ 与 /guilds/show 共用）。
 //
 // Level 由 point 反解（GuildEquipLevel），UntilPoint/Value/Value2 由重建曲线
-// 现算；bp_storage 的 value=蓄水上限、value2=当前填充比例。
+// 现算；bp_storage 的 value=蓄水上限、value2=蓄水注入比例（双锚点线性）。
 // temporary 不参与投资，值为零值（wire 层渲染为全 null）。
 func guildEquipmentsTx(tx *sql.Tx, guildID string) (map[string]*cn35game.GuildEquipment, error) {
 	rows, err := tx.Query(`SELECT type_id,point FROM cn35_guild_equipment
@@ -92,10 +92,6 @@ func guildEquipmentsTx(tx *sql.Tx, guildID string) (map[string]*cn35game.GuildEq
 	if err = rows.Close(); err != nil {
 		return nil, err
 	}
-	storage, err := bpStorageStatusTx(tx, guildID)
-	if err != nil {
-		return nil, err
-	}
 	out := make(map[string]*cn35game.GuildEquipment, len(cn35game.GuildEquipmentTypeIDs))
 	for _, typeID := range cn35game.GuildEquipmentTypeIDs {
 		point := points[typeID]
@@ -110,12 +106,6 @@ func guildEquipmentsTx(tx *sql.Tx, guildID string) (map[string]*cn35game.GuildEq
 		e.End = level >= cn35game.GuildEquipMaxLevel
 		value, value2, hasValue2 := cn35game.GuildEquipValue(typeID, level)
 		e.Value, e.Value2, e.HasValue2 = value, value2, hasValue2
-		if typeID == "bp_storage" {
-			// 蓄水上限随设施等级，填充比例随公会共享余额。
-			e.Value = float64(storage.Capacity)
-			e.Value2 = storage.Ratio
-			e.HasValue2 = true
-		}
 		out[typeID] = e
 	}
 	return out, nil

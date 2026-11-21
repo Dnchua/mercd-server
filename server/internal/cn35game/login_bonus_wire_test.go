@@ -172,10 +172,10 @@ func TestSpringReadAccrualAndClaim(t *testing.T) {
 		t.Fatalf("待领量 = %v, want 2000/2/10", doc)
 	}
 
-	// 3) 领取：contents 三行；余额/BP/可领时刻同响应刷新。
+	// 3) 领取：contents 四行（含随机 5..100 徽章）；余额/徽章/BP/可领时刻同响应刷新。
 	recv := gameData(t, ts.URL, "/users/receive_login_bonus", uid, sk, s0, s1, "")
 	contents := springContentsOf(t, recv)
-	if len(contents) != 3 {
+	if len(contents) != 4 {
 		t.Fatalf("领取 contents = %v", contents)
 	}
 	seen := map[string]float64{}
@@ -186,9 +186,16 @@ func TestSpringReadAccrualAndClaim(t *testing.T) {
 	if seen["gacha_point"] != 2000 || seen["guild_asset"] != 2 || seen["battle_point"] != 10 {
 		t.Fatalf("奖励行 = %v", seen)
 	}
+	medalGot := int64(seen["medal"])
+	if medalGot < cn35game.SpringRules.MedalMin || medalGot > cn35game.SpringRules.MedalMax {
+		t.Fatalf("泉水徽章 = %d, want [%d,%d]", medalGot, cn35game.SpringRules.MedalMin, cn35game.SpringRules.MedalMax)
+	}
 	user = springUser(t, recv)
 	if user["gacha_point"] != float64(springWireSeedPoint+2000) {
 		t.Fatalf("领取后金币 = %v", user["gacha_point"])
+	}
+	if user["medal"] != float64(medalGot) {
+		t.Fatalf("领取后徽章 = %v, want %d", user["medal"], medalGot)
 	}
 	if user["guild_asset_count"] != float64(2) {
 		t.Fatalf("领取后公会建设素材 = %v", user["guild_asset_count"])
@@ -267,8 +274,8 @@ func TestSpringConcurrentClaimOnlyOnce(t *testing.T) {
 	for _, g := range granted {
 		total += g
 	}
-	if total != 3 {
-		t.Fatalf("并发有效发奖行数合计 = %d, want 3（一次领取三行；%v）", total, granted)
+	if total != 4 {
+		t.Fatalf("并发有效发奖行数合计 = %d, want 4（一次领取四行；%v）", total, granted)
 	}
 	if _, _, gold, guild := springDBState(t, st, uid); gold != springWireSeedPoint+1000 || guild != 1 {
 		t.Fatalf("并发后余额 = 金币 %d/公会 %d", gold, guild)
@@ -287,7 +294,7 @@ func TestSpringParamInjectionIgnored(t *testing.T) {
 	recv := gameData(t, ts.URL, "/users/receive_login_bonus", uid, sk, s0, s1,
 		"count=99999&type=coin&gold=999999")
 	contents := springContentsOf(t, recv)
-	if len(contents) != 3 {
+	if len(contents) != 4 {
 		t.Fatalf("contents = %v", contents)
 	}
 	for _, c := range contents {
@@ -311,10 +318,10 @@ func TestSpringAccountIsolationAndInvalidSession(t *testing.T) {
 	springSetAnchor(t, st, uidA, now-3600)
 	springSetAnchor(t, st, uidB, now-3600)
 
-	if c := springContentsOf(t, gameData(t, ts.URL, "/users/receive_login_bonus", uidA, skA, s0A, s1A, "")); len(c) != 3 {
+	if c := springContentsOf(t, gameData(t, ts.URL, "/users/receive_login_bonus", uidA, skA, s0A, s1A, "")); len(c) != 4 {
 		t.Fatalf("A 领取应成功: %v", c)
 	}
-	if c := springContentsOf(t, gameData(t, ts.URL, "/users/receive_login_bonus", uidB, skB, s0B, s1B, "")); len(c) != 3 {
+	if c := springContentsOf(t, gameData(t, ts.URL, "/users/receive_login_bonus", uidB, skB, s0B, s1B, "")); len(c) != 4 {
 		t.Fatalf("B 领取应成功: %v", c)
 	}
 	if _, _, goldA, _ := springDBState(t, st, uidA); goldA != springWireSeedPoint+1000 {

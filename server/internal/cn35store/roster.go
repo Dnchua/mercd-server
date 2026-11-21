@@ -804,54 +804,60 @@ func (s *Store) SetRosterFlags(unitIDs []int, enabled *bool, blocked *bool, note
 		return fmt.Errorf("cn35store: 名册操作未给出变更")
 	}
 	return s.withTx(func(tx *sql.Tx) error {
-		for _, id := range unitIDs {
-			if id <= 0 {
-				return fmt.Errorf("cn35store: 非法 unit_id %d", id)
-			}
-			sets := []string{"updated_by=?", "updated_at=?"}
-			args := []any{actor, nowUTC()}
+		return setRosterFlagsTx(tx, unitIDs, enabled, blocked, note, actor)
+	})
+}
+
+// setRosterFlagsTx SetRosterFlags 的事务内实现，供多步迁移事务复用
+// （同口径更新 + 同口径审计）。
+func setRosterFlagsTx(tx *sql.Tx, unitIDs []int, enabled *bool, blocked *bool, note, actor string) error {
+	for _, id := range unitIDs {
+		if id <= 0 {
+			return fmt.Errorf("cn35store: 非法 unit_id %d", id)
+		}
+		sets := []string{"updated_by=?", "updated_at=?"}
+		args := []any{actor, nowUTC()}
+		if enabled != nil {
+			sets = append(sets, "enabled=?")
+			args = append(args, boolInt(*enabled))
+		}
+		if blocked != nil {
+			sets = append(sets, "blocked=?")
+			args = append(args, boolInt(*blocked))
+		}
+		if note != "" {
+			sets = append(sets, "notes=?")
+			args = append(args, note)
+		}
+		args = append(args, id)
+		res, err := tx.Exec(`UPDATE cn35_unit_roster SET `+
+			strings.Join(sets, ",")+` WHERE unit_id=?`, args...)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			// 名册行不存在（未导入过）：建行并置证据位为 0。
+			en, bl := int64(0), int64(0)
 			if enabled != nil {
-				sets = append(sets, "enabled=?")
-				args = append(args, boolInt(*enabled))
+				en = boolInt64(*enabled)
 			}
 			if blocked != nil {
-				sets = append(sets, "blocked=?")
-				args = append(args, boolInt(*blocked))
+				bl = boolInt64(*blocked)
 			}
-			if note != "" {
-				sets = append(sets, "notes=?")
-				args = append(args, note)
-			}
-			args = append(args, id)
-			res, err := tx.Exec(`UPDATE cn35_unit_roster SET `+
-				strings.Join(sets, ",")+` WHERE unit_id=?`, args...)
-			if err != nil {
+			if _, err := tx.Exec(`INSERT INTO cn35_unit_roster
+				(unit_id,enabled,resource_ok,missing_required,wiki,blocked,notes,updated_by,updated_at)
+				VALUES (?,?,0,'[]',0,?,?,?,?)`,
+				id, en, bl, note, actor, nowUTC()); err != nil {
 				return err
 			}
-			if n, _ := res.RowsAffected(); n == 0 {
-				// 名册行不存在（未导入过）：建行并置证据位为 0。
-				en, bl := int64(0), int64(0)
-				if enabled != nil {
-					en = boolInt64(*enabled)
-				}
-				if blocked != nil {
-					bl = boolInt64(*blocked)
-				}
-				if _, err := tx.Exec(`INSERT INTO cn35_unit_roster
-					(unit_id,enabled,resource_ok,missing_required,wiki,blocked,notes,updated_by,updated_at)
-					VALUES (?,?,0,'[]',0,?,?,?,?)`,
-					id, en, bl, note, actor, nowUTC()); err != nil {
-					return err
-				}
-			}
 		}
-		act := "unit.flags"
-		if enabled != nil {
-			act = map[bool]string{true: "unit.enable", false: "unit.disable"}[*enabled]
-		}
-		return appendAuditTx(tx, actor, act, joinInts(unitIDs), map[string]any{
-			"enabled": enabled, "blocked": blocked, "note": note, "count": len(unitIDs),
-		})
+	}
+	act := "unit.flags"
+	if enabled != nil {
+		act = map[bool]string{true: "unit.enable", false: "unit.disable"}[*enabled]
+	}
+	return appendAuditTx(tx, actor, act, joinInts(unitIDs), map[string]any{
+		"enabled": enabled, "blocked": blocked, "note": note, "count": len(unitIDs),
 	})
 }
 
@@ -1165,6 +1171,143 @@ func (s *Store) RepublishGachaFiltered(actor, note string, configured func(unitI
 	return out, out != nil, nil
 }
 
+// gachaMigrationMarkAction 是数据级迁移"已执行"标记的审计动作名。
+// 迁移即使无需改动也写一条，保证只判定一次——否则"本次跳过、未落标记"
+// 的库会在管理员后续改配置后被下次重启再次改写。
+const gachaMigrationMarkAction = "migration.mark"
+
+// UpgradeGachaPool2Discount 执行 migrate-0055 存量库卡池升级（单事务）：
+//
+//   - 激活版本：在**已发布快照**上原位升级（cn35game.PatchGachaSnapshotScoutDiscount），
+//     复制激活版本成员明细生成新版本并移动指针——不读草稿面，管理员未发布的
+//     草稿编辑不会被连带上线。
+//   - 草稿面：池 "2" 仅在仍为旧口径 10/0 时改为 9/1；全部池描述做换行转义
+//     归一。其余字段与成员不动。
+//   - 无论是否有改动都写 actor 标记（cn35_admin_audit action=migration.mark），
+//     GachaMigrationMarkers 据此保证只执行一次。
+//
+// 返回新发布版本（无快照改动时为 nil）与 published 标志。
+func (s *Store) UpgradeGachaPool2Discount(actor, note string) (*cn35game.GachaConfigVersion, bool, error) {
+	var out *cn35game.GachaConfigVersion
+	err := s.withTx(func(tx *sql.Tx) error {
+		draftChanged, err := upgradeGachaDraftPoolsTx(tx, actor)
+		if err != nil {
+			return err
+		}
+		var activeVersion int64
+		err = tx.QueryRow(`SELECT version FROM cn35_gacha_release WHERE release_id=1`).Scan(&activeVersion)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if activeVersion > 0 {
+			var snapshot string
+			if err := tx.QueryRow(`SELECT snapshot FROM cn35_gacha_pool_versions WHERE version=?`,
+				activeVersion).Scan(&snapshot); err != nil {
+				return fmt.Errorf("读激活版本 %d 快照失败: %w", activeVersion, err)
+			}
+			raw, digest, changed, err := cn35game.PatchGachaSnapshotScoutDiscount(snapshot)
+			if err != nil {
+				return err
+			}
+			if changed {
+				v, err := commitPatchedGachaVersionTx(tx, activeVersion, raw, digest, actor, note)
+				if err != nil {
+					return err
+				}
+				out = v
+			}
+		}
+		return appendAuditTx(tx, actor, gachaMigrationMarkAction, "gacha", map[string]any{
+			"note": note, "active_version": activeVersion,
+			"draft_changed": draftChanged, "published": out != nil,
+		})
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return out, out != nil, nil
+}
+
+// upgradeGachaDraftPoolsTx 草稿面同口径升级（只改 name/description/max_exec/max_bonus）。
+func upgradeGachaDraftPoolsTx(tx *sql.Tx, actor string) (bool, error) {
+	rows, err := tx.Query(`SELECT pool_id,name,description,price_coin,max_exec,max_bonus FROM cn35_gacha_pools`)
+	if err != nil {
+		return false, err
+	}
+	var pools []cn35game.GachaPoolDef
+	for rows.Next() {
+		var p cn35game.GachaPoolDef
+		if err := rows.Scan(&p.PoolID, &p.Name, &p.Description, &p.PriceCoin, &p.MaxExec, &p.MaxBonus); err != nil {
+			rows.Close()
+			return false, err
+		}
+		pools = append(pools, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	changed := false
+	for i := range pools {
+		p := pools[i]
+		if !cn35game.UpgradePool2ScoutDiscountDef(&p) {
+			continue
+		}
+		if _, err := tx.Exec(`UPDATE cn35_gacha_pools
+			SET name=?, description=?, max_exec=?, max_bonus=?, updated_by=?, updated_at=?
+			WHERE pool_id=?`,
+			p.Name, p.Description, p.MaxExec, p.MaxBonus, actor, nowUTC(), p.PoolID); err != nil {
+			return false, err
+		}
+		changed = true
+	}
+	return changed, nil
+}
+
+// commitPatchedGachaVersionTx 把基于激活版本原位升级的快照落为新版本：
+// 成员明细从激活版本复制（快照成员未改），digest 已存在则复用旧版本行；
+// 随后移动生效指针并审计。
+func commitPatchedGachaVersionTx(tx *sql.Tx, fromVersion int64, raw []byte, digest, actor, note string) (*cn35game.GachaConfigVersion, error) {
+	var version int64
+	err := tx.QueryRow(`SELECT version FROM cn35_gacha_pool_versions WHERE rules_digest=?`, digest).Scan(&version)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		res, err := tx.Exec(`INSERT INTO cn35_gacha_pool_versions
+			(rules_digest,snapshot,actor,note,created_at) VALUES (?,?,?,?,?)`,
+			digest, string(raw), actor, note, nowUTC())
+		if err != nil {
+			return nil, err
+		}
+		if version, err = res.LastInsertId(); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(`INSERT INTO cn35_gacha_pool_version_members
+			(version,pool_id,unit_id,weight,rare,resource_ok)
+			SELECT ?,pool_id,unit_id,weight,rare,resource_ok
+			FROM cn35_gacha_pool_version_members WHERE version=?`, version, fromVersion); err != nil {
+			return nil, err
+		}
+	case err != nil:
+		return nil, err
+	}
+	if _, err := tx.Exec(`INSERT INTO cn35_gacha_release (release_id,version,actor,note,updated_at)
+		VALUES (1,?,?,?,?)
+		ON CONFLICT(release_id) DO UPDATE SET version=excluded.version,
+		actor=excluded.actor,note=excluded.note,updated_at=excluded.updated_at`,
+		version, actor, note, nowUTC()); err != nil {
+		return nil, err
+	}
+	if err := appendAuditTx(tx, actor, "pool.publish", strconv.FormatInt(version, 10), map[string]any{
+		"digest": digest, "note": note, "from_version": fromVersion,
+	}); err != nil {
+		return nil, err
+	}
+	return &cn35game.GachaConfigVersion{
+		Version: version, Digest: digest, Snapshot: string(raw),
+		Actor: actor, Note: note, CreatedAt: nowUTC(),
+	}, nil
+}
+
 // publishGachaCommitTx 发布事务的校验+落库段：快照校验 → 版本行（digest
 // 去重）→ 生效指针 → 审计。调用方须已在外层事务内。
 func (s *Store) publishGachaCommitTx(tx *sql.Tx, pools []cn35game.GachaPoolDef,
@@ -1283,8 +1426,13 @@ func (s *Store) GachaVersions(limit int) ([]cn35game.GachaConfigVersion, int64, 
 // （DISTINCT 扫描无 LIMIT，版本数不受清单分页影响）。用于存量库一次性
 // 重发判定：补发过就不再发，管理员回滚/旧版不被重启覆盖。
 func (s *Store) GachaMigrationMarkers() (map[string]bool, error) {
-	rows, err := s.db.Query(`SELECT DISTINCT actor FROM cn35_gacha_pool_versions
-		WHERE actor LIKE 'migrate-%'`)
+	// 标记来源：发布过的版本作者，或迁移显式写入的 migration.mark 审计行
+	// （无需改动的迁移也必须留痕，见 UpgradeGachaPool2Discount）。
+	rows, err := s.db.Query(`SELECT actor FROM cn35_gacha_pool_versions
+		WHERE actor LIKE 'migrate-%'
+		UNION
+		SELECT actor FROM cn35_admin_audit
+		WHERE action=? AND actor LIKE 'migrate-%'`, gachaMigrationMarkAction)
 	if err != nil {
 		return nil, err
 	}

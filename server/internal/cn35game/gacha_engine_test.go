@@ -80,12 +80,21 @@ func TestGachaRulesRejectListTypeOutOfRange(t *testing.T) {
 	}
 }
 
-// TestGachaRulesRejectBonus 首期必须关闭买十赠一。
+// TestGachaRulesRejectBonus 合法 9+1（十连 9 折）通过；负数或超出 10 次上限必须被拒绝。
 func TestGachaRulesRejectBonus(t *testing.T) {
 	rules := gachaDefaultRules()
+	rules.Pools[1].MaxExecutableCount = 9
 	rules.Pools[1].MaxExecuteBonus = 1
+	if err := rules.validate(); err != nil {
+		t.Fatalf("合法 9+1 配置被拒绝: %v", err)
+	}
+	rules.Pools[1].MaxExecuteBonus = 2 // 9+2=11 > 10
 	if err := rules.validate(); err == nil {
-		t.Fatal("max_execute_bonus 非 0 未被拒绝")
+		t.Fatal("max_executable_count+max_execute_bonus=11 未被拒绝")
+	}
+	rules.Pools[1].MaxExecuteBonus = -1
+	if err := rules.validate(); err == nil {
+		t.Fatal("负 max_execute_bonus 未被拒绝")
 	}
 }
 

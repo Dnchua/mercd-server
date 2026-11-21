@@ -115,9 +115,15 @@ func buildAlbumRow(doc map[string]any, u *cardcatalog.Unit, owned bool, rec Unit
 	isUserUnit := owned && !rec.Waiting
 	isWaiting := owned && rec.Waiting
 	base["order_num"] = u.ID
-	base["can_evolution_level"] = 0
+	base["can_evolution_level"] = 10*u.Rare + 20
 	base["is_leader_unit"] = isUserUnit && isLeader
-	base["evolution_map"] = map[string]any{"id": 0, "need": map[string]any{"1": 1}}
+	if evoRule, ok := UnitEvolutionRule(u.ID, u.Element); ok {
+		base["is_evolutable"] = true
+		base["evolution_map"] = map[string]any{"id": evoRule.ToUnitID, "need": evoRule.Need}
+	} else {
+		base["is_evolutable"] = false
+		base["evolution_map"] = map[string]any{}
+	}
 	base["hide"] = !owned
 	// is_user_unit/is_waiting/is_showable：客户端 s() 比较，字符串形态。
 	if isUserUnit {

@@ -1,0 +1,842 @@
+{
+ "module": "M10",
+ "version": "cn350-m10-candidate-v1",
+ "single_actor": true,
+ "implementation_ready": false,
+ "note": "M10 癒术士大赛与公会训练离线候选计划；服务端协议/持久化与冒泡测试已通过（TestM10*、TestPvP*），本轮按要求未做实机校准与运行，implementation_ready 保持 false。",
+ "flows": {
+  "open_daily": [
+   {
+    "op": "click",
+    "target": "m10.nav.home"
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "op": "click",
+    "target": "m10.daily.icon"
+   },
+   {
+    "op": "request",
+    "path": "/users/function_portal"
+   }
+  ],
+  "open_ladder": [
+   {
+    "op": "click",
+    "target": "m10.nav.home"
+   },
+   {
+    "op": "click",
+    "target": "m10.daily.icon"
+   },
+   {
+    "op": "request",
+    "path": "/users/function_portal"
+   },
+   {
+    "op": "click",
+    "target": "m10.portal.ladder"
+   },
+   {
+    "op": "request",
+    "path": "/ladders/show_ladder_info"
+   },
+   {
+    "op": "visible",
+    "target": "ladder.main.title"
+   }
+  ],
+  "open_rob": [
+   {
+    "op": "click",
+    "target": "m10.nav.home"
+   },
+   {
+    "op": "click",
+    "target": "m10.daily.icon"
+   },
+   {
+    "op": "request",
+    "path": "/users/function_portal"
+   },
+   {
+    "op": "click",
+    "target": "m10.portal.rob"
+   },
+   {
+    "op": "request",
+    "path": "/rob_battles/show_rob_battles_info"
+   },
+   {
+    "op": "visible",
+    "target": "rob.main.title"
+   }
+  ],
+  "ladder_fight_normal": [
+   {
+    "op": "click",
+    "target": "ladder.btn.challenge"
+   },
+   {
+    "op": "request",
+    "path": "/ladders/get_candidates"
+   },
+   {
+    "op": "click",
+    "target": "ladder.challenger.fight"
+   },
+   {
+    "op": "click",
+    "target": "ladder.select.normal"
+   },
+   {
+    "op": "click",
+    "target": "ladder.select.start"
+   },
+   {
+    "op": "request",
+    "path": "/ladders/ladder_quest_execute.json"
+   },
+   {
+    "op": "request",
+    "path": "/ladders/lc_used"
+   }
+  ]
+ },
+ "cases": [
+  {
+   "id": "M1001",
+   "name": "日常入口",
+   "criteria": [
+    "主人公的日常列表含公会训练、癒术士大赛横幅",
+    "真·男主光环按钮保持置灰"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_01_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_01_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_daily"
+    },
+    {
+     "op": "visible",
+     "target": "m10.portal.ladder"
+    },
+    {
+     "op": "visible",
+     "target": "m10.portal.rob"
+    },
+    {
+     "op": "visible",
+     "target": "m10.daily.chara_buff_disabled"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_01_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_01_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ]
+  },
+  {
+   "id": "M1002",
+   "name": "大赛主页与未设防御提示",
+   "criteria": [
+    "显示 6 个按钮与规则",
+    "未设防御点开始挑战弹提示并跳防御设定"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_02_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_02_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_ladder"
+    },
+    {
+     "op": "click",
+     "target": "ladder.btn.rule"
+    },
+    {
+     "op": "click",
+     "target": "modal.ok"
+    },
+    {
+     "op": "click",
+     "target": "ladder.btn.challenge"
+    },
+    {
+     "op": "visible",
+     "target": "modal.body.deck_empty"
+    },
+    {
+     "op": "click",
+     "target": "modal.ok"
+    },
+    {
+     "op": "visible",
+     "target": "ladder.defense.title"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/monsters"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_02_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_02_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1001"
+   ]
+  },
+  {
+   "id": "M1003",
+   "name": "防御设定",
+   "criteria": [
+    "第 1 格写入防御魔宠"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_03_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_03_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_ladder"
+    },
+    {
+     "op": "click",
+     "target": "ladder.btn.defense"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/monsters"
+    },
+    {
+     "op": "click",
+     "target": "ladder.defense.slot1"
+    },
+    {
+     "op": "click",
+     "target": "ladder.monster.first"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/set_deck"
+    },
+    {
+     "op": "visible",
+     "target": "ladder.defense.slot1"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_03_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_03_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1002"
+   ]
+  },
+  {
+   "id": "M1004",
+   "name": "候选对手",
+   "criteria": [
+    "列表 20 行"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_04_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_04_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_ladder"
+    },
+    {
+     "op": "click",
+     "target": "ladder.btn.challenge"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/get_candidates"
+    },
+    {
+     "op": "visible",
+     "target": "ladder.challenger.title"
+    },
+    {
+     "op": "visible",
+     "target": "ladder.challenger.row.first"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_04_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_04_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1003"
+   ]
+  },
+  {
+   "id": "M1005",
+   "name": "大赛战斗胜利",
+   "criteria": [
+    "lc 3→2",
+    "结算屏显示积分",
+    "积分增加且会话 won"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_05_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_05_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_ladder"
+    },
+    {
+     "flow": "ladder_fight_normal"
+    },
+    {
+     "op": "visible",
+     "target": "battle.result.clear"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/attack"
+    },
+    {
+     "op": "visible",
+     "target": "battle.result.score"
+    },
+    {
+     "op": "click",
+     "target": "battle.result.next"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_05_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_05_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1004"
+   ]
+  },
+  {
+   "id": "M1006",
+   "name": "次数用尽",
+   "criteria": [
+    "连续出击 3 次后再出击弹窗",
+    "day_used 不超过 3"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_06_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_06_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_ladder"
+    },
+    {
+     "op": "click",
+     "target": "ladder.btn.challenge"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/get_candidates"
+    },
+    {
+     "op": "click",
+     "target": "ladder.challenger.fight"
+    },
+    {
+     "op": "click",
+     "target": "ladder.select.normal"
+    },
+    {
+     "op": "click",
+     "target": "ladder.select.start"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/ladder_quest_execute.json"
+    },
+    {
+     "op": "visible",
+     "target": "modal.body.no_count"
+    },
+    {
+     "op": "click",
+     "target": "modal.ok"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_06_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_06_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1005"
+   ]
+  },
+  {
+   "id": "M1007",
+   "name": "魔宠增幅升级与重置",
+   "criteria": [
+    "升级 1 级扣 50 药水",
+    "重置返还"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_07_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_07_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_ladder"
+    },
+    {
+     "op": "click",
+     "target": "ladder.btn.grow"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/monster_grow_index"
+    },
+    {
+     "op": "click",
+     "target": "grow.tab.hp"
+    },
+    {
+     "op": "click",
+     "target": "grow.row1.levelup"
+    },
+    {
+     "op": "click",
+     "target": "grow.modal.up"
+    },
+    {
+     "op": "click",
+     "target": "grow.modal.confirm"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/monster_grow_upgrade"
+    },
+    {
+     "op": "click",
+     "target": "grow.reset"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/monster_grow_upgrade_reset"
+    },
+    {
+     "op": "visible",
+     "target": "grow.row1.levelup"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_07_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_07_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1005"
+   ]
+  },
+  {
+   "id": "M1008",
+   "name": "排行榜",
+   "criteria": [
+    "本人在榜",
+    "无奖励时不显示领取按钮"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_08_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_08_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_ladder"
+    },
+    {
+     "op": "click",
+     "target": "ladder.btn.rank"
+    },
+    {
+     "op": "request",
+     "path": "/ladders/show_rank"
+    },
+    {
+     "op": "visible",
+     "target": "rank.list.first"
+    },
+    {
+     "op": "absent",
+     "target": "rank.get_btn.hidden"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_08_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_08_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1005"
+   ]
+  },
+  {
+   "id": "M1009",
+   "name": "公会训练主页与购券",
+   "criteria": [
+    "免费券可购",
+    "购券后 rc=5"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_09_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_09_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_rob"
+    },
+    {
+     "op": "click",
+     "target": "rob.enter1"
+    },
+    {
+     "op": "click",
+     "target": "modal.ok"
+    },
+    {
+     "op": "request",
+     "path": "/rob_battles/buy_rob_ticket"
+    },
+    {
+     "op": "visible",
+     "target": "rob.main.title"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_09_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_09_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1001"
+   ]
+  },
+  {
+   "id": "M1010",
+   "name": "攻守编队与职业限制",
+   "criteria": [
+    "两套各 10 格写入",
+    "第 3 名治疗被拒绝"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_10_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_10_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_rob"
+    },
+    {
+     "op": "click",
+     "target": "rob.tab.defence"
+    },
+    {
+     "op": "click",
+     "target": "rob.deck.slot1"
+    },
+    {
+     "op": "click",
+     "target": "rob.unit.first"
+    },
+    {
+     "op": "request",
+     "path": "/user_rob_decks/on"
+    },
+    {
+     "op": "click",
+     "target": "rob.deck.slot1"
+    },
+    {
+     "op": "click",
+     "target": "rob.unit.heal3"
+    },
+    {
+     "op": "visible",
+     "target": "modal.body.career_limit"
+    },
+    {
+     "op": "click",
+     "target": "modal.ok"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_10_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_10_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1009"
+   ]
+  },
+  {
+   "id": "M1011",
+   "name": "公会训练自动战斗",
+   "criteria": [
+    "rc 减 1",
+    "胜利时积分增加并显示",
+    "败北积分不变",
+    "候选计划按胜利分支编写；若校准阶段 NPC 阵容导致败北，改断言 /rob_battles/lose 与 autobattle.result.lose"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_11_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_11_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "flow": "open_rob"
+    },
+    {
+     "op": "click",
+     "target": "rob.enter1"
+    },
+    {
+     "op": "request",
+     "path": "/rob_battles/get_candidates"
+    },
+    {
+     "op": "click",
+     "target": "rob.challenger.fight"
+    },
+    {
+     "op": "request",
+     "path": "/rob_battles/battle_ready"
+    },
+    {
+     "op": "visible",
+     "target": "rob.ready.enemy.first"
+    },
+    {
+     "op": "visible",
+     "target": "rob.ready.reward"
+    },
+    {
+     "op": "click",
+     "target": "rob.ready.start"
+    },
+    {
+     "op": "request",
+     "path": "/rob_battles/rob_battle_quest_execute.json"
+    },
+    {
+     "op": "request",
+     "path": "/rob_battles/rc_used"
+    },
+    {
+     "op": "request",
+     "path": "/rob_battles/attack",
+     "timeout": 330
+    },
+    {
+     "op": "visible",
+     "target": "autobattle.result.clear"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_11_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_11_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1010"
+   ]
+  },
+  {
+   "id": "M1012",
+   "name": "同库重启一致性",
+   "criteria": [
+    "积分、次数、编队、增幅、药水、台账、战绩重启前后一致"
+   ],
+   "steps": [
+    {
+     "op": "capture_sql",
+     "sql": "${m10_12_snapshot_sql}",
+     "params": [
+      "${A_uid}"
+     ],
+     "as": "m10_12_before"
+    },
+    {
+     "op": "mark"
+    },
+    {
+     "op": "server",
+     "action": "restart_same_state"
+    },
+    {
+     "op": "restart_app"
+    },
+    {
+     "flow": "open_ladder"
+    },
+    {
+     "op": "request",
+     "path": "/users/preset_data"
+    },
+    {
+     "op": "assert_sql",
+     "sql": "${m10_12_assert_sql}",
+     "params": [
+      "${A_uid}",
+      "${m10_12_before}"
+     ],
+     "compare": "eq",
+     "expected": 1
+    }
+   ],
+   "depends_on": [
+    "M1011"
+   ]
+  }
+ ]
+}

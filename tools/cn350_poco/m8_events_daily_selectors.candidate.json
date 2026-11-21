@@ -1,0 +1,252 @@
+{
+  "nav.quest": {
+    "selector": {
+      "attrs": {
+        "name": "QuestButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "stage.tab.arrow_right": {
+    "selector": {
+      "attrs": {
+        "name": "arrowRight"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "stage.tab.past_event": {
+    "selector": {
+      "attrs": {
+        "name": "Button5"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "stage.tab.trials": {
+    "selector": {
+      "attrs": {
+        "name": "Button4"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "event.row.first": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^EventStageListRow.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "event.row.current": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^EventStageListRow.*44$"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "event.row.lock": {
+    "selector": {
+      "attrs": {
+        "name": "lockTexture"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "area.page.header": {
+    "selector": {
+      "attrs": {
+        "text": "选择区域"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "area.row.first": {
+    "selector": {
+      "attrs": {
+        "name": "001"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "area.row.percentage": {
+    "selector": {
+      "attrs": {
+        "name": "achivementLabel"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "area.quest.first": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^9855[0-9]$"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "area.quest.boss": {
+    "selector": {
+      "attrs": {
+        "name": "98556"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "quest.difficulty.normal": {
+    "selector": {
+      "attrs": {
+        "name": "normalButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "quest.difficulty.hard": {
+    "selector": {
+      "attrs": {
+        "name": "hardButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "quest.difficulty.very_hard": {
+    "selector": {
+      "attrs": {
+        "name": "veryHardButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "quest.start": {
+    "selector": {
+      "attrs": {
+        "name": "StartButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "battle.boss_gauge": {
+    "selector": {
+      "attrs": {
+        "name": "BossGauge"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "battle.result.clear": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^txt-clear.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "battle.result.next": {
+    "selector": {
+      "attrs": {
+        "name": "NextButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "battle.reward_modal": {
+    "selector": {
+      "attrs": {
+        "text": "区域探险完成率奖励"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "daily.banner": {
+    "selector": {
+      "attrs": {
+        "name": "DailyQuestBanner"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "daily.tier.normal": {
+    "selector": {
+      "attrs": {
+        "name": "normalButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "daily.tier.hard": {
+    "selector": {
+      "attrs": {
+        "name": "hardButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "daily.tier.very_hard": {
+    "selector": {
+      "attrs": {
+        "name": "veryHardButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "daily.tier.impossible": {
+    "selector": {
+      "attrs": {
+        "name": "impossibleButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "daily.header": {
+    "selector": {
+      "attrs": {
+        "text": "每日限定探险"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "modal.event_closed": {
+    "selector": {
+      "attrs": {
+        "text": "活动未开放"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "modal.coming_soon": {
+    "selector": {
+      "attrs": {
+        "textMatches": ".*即将开放.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "present.row.unit_1274": {
+    "selector": {
+      "attrs": {
+        "textMatches": ".*夏尔梅.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "nav.back": {
+    "selector": {
+      "attrs": {
+        "name": "Header"
+      },
+      "offspring": [
+        {
+          "name": "BackButton"
+        }
+      ]
+    },
+    "status": "candidate-not-device-verified",
+    "calibration": {
+      "client_fingerprint": "f61c09c67ef36990099fbf612aefecd8cab0dc3dc261d81d6a9ed953f03db981",
+      "evidence": "output/poco/m6_calibrate/raid_members.tree.json",
+      "tree_sha256": "ac7c8f177f73a468e1212ef72762cdf601546c0ff06e03e81868c25fb2b3f5ff"
+    }
+  }
+}

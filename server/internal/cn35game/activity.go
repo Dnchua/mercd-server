@@ -40,17 +40,23 @@ import (
 //  2. 其 OnClick.message 的目标页存在于 app_conf pages；
 //  3. 横幅图 asset_name 走 common/*（CN3.5 只有该通道可出图）。
 //
-// 现选四项与目标页：
+// 现选六项与目标页：
 //
 //	banner6               每日签到得好礼 → AccLoginRewardsActivity（真实读/领面）
 //	banner_gacha          钻石限定★5招募 → Gacha（/gachas 真实）
 //	banner_medal_exchange 徽章交换所     → ExchangeShopScrollable
 //	banner_gacha_sale     钻石限定优惠   → Gacha（同页第二入口）
+//	banner_raid           暴走魔宠活动   → Raid
+//	banner_raid_info      暴走魔宠说明   → RaidEventPage（含 RaidLvBonusPage 入口）
+//	banner_raid_pt        暴走 pt 交换   → RaidPtBonusPage
 var activityPageWhitelist = []string{
 	"banner6",
 	"banner_gacha",
 	"banner_medal_exchange",
 	"banner_gacha_sale",
+	"banner_raid",
+	"banner_raid_info",
+	"banner_raid_pt",
 }
 
 // activityIDsCache 缓存从 app_conf 解析出的 banners 键序（按资产目录粒度）。
@@ -110,6 +116,15 @@ func loadActivityPageIDs(assetsDir string) []string {
 // 原版 act_has_new 由运营按下发；重建规则取「签到可领」这一可推导事实，避免
 // 恒 true 让红点常亮（旧实现固定 true）。未装配 Signin 时不点亮。
 func activityHasNew(dep Deps, userID string, now int64) bool {
+	if dep.Raid != nil {
+		raidNow := now
+		if dep.RaidClock != nil {
+			raidNow = dep.RaidClock().Unix()
+		}
+		if has, err := dep.Raid.RaidHasActive(userID, raidNow); err == nil && has {
+			return true
+		}
+	}
 	if dep.Signin == nil {
 		return false
 	}

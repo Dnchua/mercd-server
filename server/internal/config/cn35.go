@@ -64,6 +64,15 @@ type CN35Config struct {
 	// 只影响「时窗/日场/结算判定」用到的 now，不改写任何落库时间戳，
 	// 也不改系统时间；用于在非 12:00-13:00 / 20:00-21:00 时段做实机会战验收。
 	GuildClockOffset time.Duration
+
+	// Raid 暴走魔宠活动配置：默认当期王宠 688 莫鲁菲涅、50% 遭遇率、90 分钟存活时长。
+	RaidBossMonsterID int
+	RaidTriggerRate   float64
+	RaidTTLSeconds    int64
+	RaidSoloAssist    bool
+
+	// EventWindows M8 活动时间窗覆盖："44=<RFC3339>/<RFC3339>;..."（空=按目录默认，默认关闭）。
+	EventWindows string
 }
 
 // BindCN35 注册 mercd35 的 flag 集。
@@ -99,6 +108,16 @@ func (c *CN35Config) BindCN35(fs *flag.FlagSet) {
 		"单机 NPC 公会池总量上限（有界补充，1..60）")
 	fs.DurationVar(&c.GuildClockOffset, "guild-clock-offset", 0,
 		"公会战判定时钟偏移（验收/排障测试手段；只影响时窗判定，默认 0）")
+	fs.IntVar(&c.RaidBossMonsterID, "raid-boss-id", 688,
+		"暴走魔宠默认王宠怪物 ID（默认 688 莫鲁菲涅）")
+	fs.Float64Var(&c.RaidTriggerRate, "raid-trigger-rate", 0.5,
+		"常规探险通关触发暴走强袭的概率（0..1，默认 0.5）")
+	fs.Int64Var(&c.RaidTTLSeconds, "raid-ttl-sec", 5400,
+		"暴走魔宠存活时长（秒，默认 5400=90 分钟）")
+	fs.BoolVar(&c.RaidSoloAssist, "raid-solo-assist", false,
+		"单机暴走模拟协力开关（开启时求援触发本地助战削血，默认关闭）")
+	fs.StringVar(&c.EventWindows, "event-windows", "",
+		"M8 活动开放时间窗（44=2026-11-20T12:00:00+08:00/2026-12-04T11:00:00+08:00；多个用 ; 分隔；空=关闭）")
 }
 
 // ValidateCN35 校验并归一化配置。
@@ -143,6 +162,12 @@ func (c *CN35Config) ValidateCN35() error {
 	}
 	if c.RemoteAssetsScan < 0 {
 		return fmt.Errorf("config: remote-assets-scan 不能为负: %s", c.RemoteAssetsScan)
+	}
+	if c.RaidTriggerRate < 0 || c.RaidTriggerRate > 1 {
+		return fmt.Errorf("config: raid-trigger-rate 必须在 [0, 1] 之间: %v", c.RaidTriggerRate)
+	}
+	if c.RaidTTLSeconds < 0 {
+		return fmt.Errorf("config: raid-ttl-sec 不能为负: %d", c.RaidTTLSeconds)
 	}
 	return nil
 

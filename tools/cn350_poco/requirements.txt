@@ -1,0 +1,3 @@
+airtest>=1.3,<2
+pocoui>=1.0,<2
+frida>=16,<18

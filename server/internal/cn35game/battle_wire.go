@@ -183,6 +183,16 @@ func questExecuteHandler(dep Deps) httpapi.Handler {
 			return cn35wire.MarshalJSON(questModal("无法战斗", "关卡不存在"))
 		}
 		diff := q.Get("difficulty_id")
+		if quest.Kind == "daily" {
+			// 周常每档是独立关卡（DailyQuestSelectParts 只发 id），难度恒 normal。
+			if diff != "" && diff != "normal" {
+				return cn35wire.MarshalJSON(questModal("无法战斗", "该探险不区分难度"))
+			}
+			diff = "normal"
+		}
+		if diff == "impossible" && quest.Kind == "event" {
+			return cn35wire.MarshalJSON(questModal("无法战斗", "炼狱难度暂未开放"))
+		}
 		if quest.NoDifficulty || quest.AlwaysOpen {
 			// 资源副本是单档副本：缺省按 normal；显式传其他难度拒绝，
 			// 不把 hard/very_hard 结算计数混进进度文档。
@@ -199,9 +209,26 @@ func questExecuteHandler(dep Deps) httpapi.Handler {
 		if err != nil {
 			return nil, err
 		}
-		if !quest.AlwaysOpen &&
-			(!cat.questCatalog.storyQuestID(prog.QuestID) || quest.ID > prog.QuestID) {
-			return cn35wire.MarshalJSON(questModal("无法战斗", "关卡尚未解锁"))
+		switch quest.Kind {
+		case "event":
+			// M8 E5：活动关须在时间窗内且不超过推进边界。
+			ev := cat.events.byID[quest.EventID]
+			if ev == nil || !eventWindow(dep, ev).Open(eventClockNow(dep)) {
+				return cn35wire.MarshalJSON(questModal("无法战斗", "活动未开放"))
+			}
+			if _, fq := eventFrontier(ev, prog); quest.ID > fq {
+				return cn35wire.MarshalJSON(questModal("无法战斗", "关卡尚未解锁"))
+			}
+		case "daily":
+			// M8 E5：周常只开放服务端当天（Asia/Shanghai 0 点切日）。
+			if quest.Wday != cat.events.dailyWday(eventClockNow(dep)) {
+				return cn35wire.MarshalJSON(questModal("无法战斗", "该探险今日未开放"))
+			}
+		default:
+			if !quest.AlwaysOpen &&
+				(!cat.questCatalog.storyQuestID(prog.QuestID) || quest.ID > prog.QuestID) {
+				return cn35wire.MarshalJSON(questModal("无法战斗", "关卡尚未解锁"))
+			}
 		}
 		// party_id 来自轮盘行名 001/002/...，不是 parties map key。
 		// unit_ids 是客户端传来的全库存，不参与队伍解析或授权。
@@ -254,6 +281,12 @@ func questExecuteHandler(dep Deps) httpapi.Handler {
 		// RUNE350-03 符文本：掉落判定需要参战符文（收集乘算），冻结点
 		// 移到 OpenBattleForParty 同事务——这里只注入带 seed 的规格
 		// 副本，不落 rewards。
+		// M8 周常素材：开战摇一次，快照随会话冻结（不进资源本版本台账）。
+		if drops, ok := cat.eventDrops[quest.ID]; ok {
+			got := rollResourceRewards(drops, cat.itemContent, rnd)
+			rolled = append(rolled, got...)
+			rewards = append(rewards, got...)
+		}
 		var runeSpec *RuneDropSpec
 		if spec, ok := cat.runeSpecs[quest.ID]; ok {
 			cp := *spec
@@ -264,7 +297,7 @@ func questExecuteHandler(dep Deps) httpapi.Handler {
 		bgID := pickBattleBackground(quest, rnd)
 		sess := &BattleSession{
 			BattleID: newBattleID(), UserID: req.UserID,
-			QuestID: quest.ID, AreaID: quest.AreaID, Difficulty: diff,
+			QuestID: quest.ID, AreaID: battleSessionAreaID(quest), Difficulty: diff,
 			Status: BattlePrepared, APCost: apCost,
 			Rewards:     rewards,
 			Exp:         prof.Exp,
@@ -336,7 +369,8 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 	if len(injected) > 0 {
 		appearTable = appearTableWithRewards(appearTable, injected)
 	}
-	// quest 子文档：catalog 字段 + 难度上下文回显 + 目录级默认。
+	fac := GuildFacilityLevelsForUser(dep, sess.UserID)
+	// quest 子文档：catalog 字段 + 难度上下文回显 + 目录级默认 + 祭坛初始 SP 加成。
 	diffName := quest.DifficultyNames[difficultyIndex(diff)]
 	questDoc := map[string]any{
 		"id": quest.ID, "name": quest.Name,
@@ -345,9 +379,9 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 		"use_ap_map":             quest.UseAPMap,
 		"difficulty_id":          diff,
 		"difficulty_name":        diffName,
-		"difficulty_option_name": "",
+		"difficulty_option_name": quest.DifficultyOptionName,
 		"background_id":          bgID,
-		"initial_power":          quest.InitialPower,
+		"initial_power":          quest.InitialPower + fac.InitialSPBonus(),
 		"unit_count_limit":       quest.UnitCountLimit,
 		"seed_atack_rate":        quest.SeedAtackRate,
 		"unit_help_rate":         quest.UnitHelpRate,
@@ -355,6 +389,14 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 		"wave_conf":              quest.WaveConf,
 		"background":             cat.Defaults.Background,
 		"powerup_conf":           cat.Defaults.PowerupConf,
+	}
+	// M8：活动/周常补齐录播 quest 字段集合（use_cp/weather/七武器率/
+	// help_*/attr_id/labels/area_id/retriable_ended_at/is_hard_mode）。
+	if quest.Kind != "" {
+		for k, v := range eventBattleQuestFields(*quest, executeRetriableEndedAt(dep, quest)) {
+			questDoc[k] = v
+		}
+		questDoc["is_hard_mode"] = false
 	}
 	// 武器优势倍率按难度表下发（客户端在战内按 difficulty_id 查表；
 	// 符文本等副本上调斩/铳率时经此通路）。
@@ -386,6 +428,16 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 		partyRunes = append(partyRunes, skillsByUnit[r.UnitID]...)
 	}
 	_, goldFactor := CollectRuneFactors(partyRunes)
+	fateEntries := fateEntriesFor(dep, sess.UserID)
+	if fb := FateBonusMap(fateEntries); len(fb) > 0 {
+		fateGoldRate := fb["gold_drop_main"]
+		if sess.ConfigVersion > 0 || quest.Kind == "daily" {
+			fateGoldRate = fb["gold_drop_daily"]
+		}
+		if fateGoldRate > 0 {
+			goldFactor *= 1.0 + fateGoldRate
+		}
+	}
 	if goldFactor > 1 {
 		goldTarget := 0
 		for _, r := range sess.Rewards {
@@ -406,7 +458,11 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 		if err != nil {
 			return nil, err
 		}
+		baseHP, _ := udoc["hp"].(int)
+		baseAT, _ := udoc["at"].(int)
 		applyUnitSkills(udoc, cu.Rare, r.DuplicatedCount, skillsByUnit[r.UnitID])
+		ApplyUnitFateBuffs(udoc, cu.Element, fateEntries)
+		ApplyUnitFacilityBuff(udoc, baseHP, baseAT, fac.HP, fac.AT)
 		units = append(units, udoc)
 	}
 	// asset_names：单位/敌方魔宠三件套 + 参战魔宠贴图 + 公共段 + 背景/BGM + 关追加。
@@ -484,7 +540,7 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 		"quest":          questDoc,
 		"units":          units,
 		"monsters":       monsters,
-		"main_character": cat.Defaults.MainCharacter,
+		"main_character": CloneMainCharacterWithBuff(cat.Defaults.MainCharacter, fac.MainHPBonus()),
 		"appear_table":   appearTable,
 		"help_table":     helpTable,
 		"timezone_table": timezone,
@@ -501,6 +557,9 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 		"next_page_message": battleNextPage(cat, battle),
 		"battle_log":        derefBool(cat.Defaults.BattleLog, false),
 		"data":              map[string]any{"user": userDoc},
+	}
+	if hb := fac.HelpLevelBase(); hb > 0 {
+		doc["guild_asset_help_level_base"] = hb
 	}
 	return doc, nil
 }
@@ -863,9 +922,36 @@ func questResultHandler(dep Deps) httpapi.Handler {
 		}
 		// data 回推：user 最新态 + 本区关卡表（clear/解锁即时反映）。
 		data := map[string]any{"user": snap.User}
+		var rateReward map[string]any
 		if cat, err := loadMergedCatalog(dep); err == nil {
-			if quests := unlockedQuestDocs(cat.questCatalog, dep, req.UserID, res.Session.AreaID); quests != nil {
+			if quests := unlockedQuestDocs(cat, dep, req.UserID, res.Session.AreaID); quests != nil {
 				data[fmt.Sprintf("quests_%d", res.Session.AreaID)] = quests
+			}
+			// M8 E6：活动关结算后对账完成率奖励；周常回推当日列表刷新 clear_count。
+			if q := cat.questByID(res.Session.QuestID); q != nil && cat.events != nil {
+				switch q.Kind {
+				case "event":
+					if ev := cat.events.byID[q.EventID]; ev != nil {
+						if prog, perr := questProgressFor(dep, req.UserID); perr == nil {
+							granted, gerr := reconcileEventRewards(dep, ev, req.UserID, prog)
+							if gerr != nil {
+								return nil, gerr
+							}
+							if len(granted) > 0 {
+								rateReward = progressRateRewardMessage(granted)
+								data["user_presents"] = nil
+								c.Decoded["event_rewards"] = len(granted)
+							}
+						}
+					}
+				case "daily":
+					if day := cat.events.byWday[q.Wday]; day != nil {
+						if prog, perr := questProgressFor(dep, req.UserID); perr == nil {
+							data[fmt.Sprintf("daily_quests_%d", q.Wday)] = dailyQuestDocs(cat, day, prog,
+								cat.events.dailyDayEnd(eventClockNow(dep)))
+						}
+					}
+				}
 			}
 			if len(res.MonsterUUIDs) > 0 {
 				data["monster_albums"] = nil
@@ -895,16 +981,36 @@ func questResultHandler(dep Deps) httpapi.Handler {
 				data["user_skills"] = nil
 			}
 		}
+		nextPage := resultNextPage(dep, res.Session)
+		if res.Session != nil && res.Session.APCost > 0 && dep.Raid != nil {
+			now := raidWireNow(dep)
+			if inst, spawned, rerr := dep.Raid.MaybeSpawnRaidOnQuestClear(
+				req.UserID, raidBossMeta(dep, 0), dep.RaidConfig, raidRollFloat(dep), now,
+			); rerr == nil && spawned && inst != nil {
+				if ov, oerr := dep.Raid.RaidOverview(req.UserID, now); oerr == nil {
+					for k, v := range buildRaidOverviewData(ov, now) {
+						data[k] = v
+					}
+				}
+				data["raid_monster"] = raidAppearDoc(inst, now)
+				c.Decoded["raid_spawned_id"] = inst.RaidID
+				nextPage = "name=Raid&base=Common/Pages/Raid&method=Stack"
+			}
+		}
 		c.Decoded["clear_count"] = res.ClearCount
-		return cn35wire.MarshalJSON(map[string]any{
+		out := map[string]any{
 			"status":            "success",
 			"data":              data,
-			"next_page_message": resultNextPage(dep, res.Session),
+			"next_page_message": nextPage,
 			// 结算屏展示键（SWFQuestClear.cs:381-407 已证消费）：
 			// spend_time 回显客户端上行的战斗秒数。total_gp/message
 			// 等暂无真值来源的键不下发（客户端有键才渲染对应行）。
 			"spend_time": int(rep.Time),
-		})
+		}
+		if rateReward != nil {
+			out["progress_rate_reward_message"] = rateReward
+		}
+		return cn35wire.MarshalJSON(out)
 	})
 }
 
@@ -922,12 +1028,20 @@ func resultNextPage(dep Deps, sess *BattleSession) string {
 
 // unlockedQuestDocs 组 quests_<areaId> 键值：本区已解锁关卡的 questDoc 列表。
 // 返回 nil 表示目录不可用/区不存在（不阻断结算主响应）。
-func unlockedQuestDocs(cat *questCatalog, dep Deps, userID string, areaID int) []any {
-	if cat.areaByID(areaID) == nil {
+func unlockedQuestDocs(mc *mergedCatalog, dep Deps, userID string, areaID int) []any {
+	cat := mc.questCatalog
+	area := cat.areaByID(areaID)
+	if area == nil {
 		return nil
 	}
 	prog, err := questProgressFor(dep, userID)
 	if err != nil {
+		return nil
+	}
+	if area.EventID != 0 && mc.events != nil {
+		if ev := mc.events.byID[area.EventID]; ev != nil {
+			return eventAreaQuestDocs(dep, mc, ev, areaID, prog)
+		}
 		return nil
 	}
 	out := []any{}
@@ -1054,4 +1168,13 @@ func questLogBattleHandler(dep Deps) httpapi.Handler {
 		}
 		return cn35wire.MarshalJSON(map[string]any{})
 	})
+}
+
+// battleSessionAreaID 会话 area_id（0007 CHECK area_id>=1）：周常关无区域，
+// 记为当日号段占位 80000+wday*10（不在区域表，结算不回推 quests_<area>）。
+func battleSessionAreaID(q *catalogQuest) int {
+	if q.Kind == "daily" && q.AreaID == 0 {
+		return dailyQuestBase + q.Wday*10
+	}
+	return q.AreaID
 }

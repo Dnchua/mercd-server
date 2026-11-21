@@ -83,6 +83,12 @@ func usersMessagesHandler(dep Deps) httpapi.Handler {
 		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 		now := time.Now()
 		messages := BuildMessagesPayload(dep.Messages, now, rng, lastReadAt)
+		if dep.Raid != nil {
+			raidNow := raidWireNow(dep)
+			if helpMsgs, herr := dep.Raid.RaidHelpMessages(req.UserID, raidNow); herr == nil {
+				MergeRaidHelpMessages(messages, helpMsgs, raidNow)
+			}
+		}
 
 		sampled := 0
 		for _, cat := range footerMessageCategories {
@@ -186,6 +192,22 @@ func usersShowHandler(dep Deps) httpapi.Handler {
 		}
 		numericFieldsToNumber(snap.User, "leader_unit_id", "helper_unit_id")
 		userTemp := buildUserTempDoc(snap.User, targetUID)
+		if targetUID != "" && targetUID != req.UserID {
+			if targetSnap, terr := dep.Accounts.Snapshot(targetUID); terr == nil && targetSnap != nil {
+				numericFieldsToNumber(targetSnap.User, "leader_unit_id", "helper_unit_id")
+				userTemp = buildUserTempDoc(targetSnap.User, targetUID)
+			} else if npc, ok := LookupNPCFriend(targetUID); ok {
+				userTemp["name"] = npc.Name
+				userTemp["level"] = npc.Level
+				userTemp["leader_unit_id"] = int64(npc.UnitID)
+				userTemp["helper_unit_id"] = int64(npc.UnitID)
+				userTemp["leader_unit"] = map[string]any{
+					"id":      npc.UnitID,
+					"unit_id": npc.UnitID,
+					"level":   npc.Level,
+				}
+			}
+		}
 		c.Decoded = map[string]any{
 			"cn35": true, "uid": req.UserID, "endpoint": "users_show",
 			"target_uid": targetUID,

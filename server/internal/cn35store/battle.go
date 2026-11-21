@@ -151,6 +151,27 @@ func (s *Store) OpenBattleForParty(sess *cn35game.BattleSession, apTTLSeconds in
 				return err
 			}
 		}
+		// FATE350：主线/每日资源关卡金币掉落星盘加成（开战快照冻结；按 ConfigVersion 区分主线探险与每日探险，不交叉叠加）。
+		if fb := s.fateBonusMapTx(tx, sess.UserID, cn35game.FatePeriodKey(s.clockNowUTC())); len(fb) > 0 {
+			rate := fb["gold_drop_main"]
+			if sess.ConfigVersion > 0 {
+				rate = fb["gold_drop_daily"]
+			}
+			if rate > 0 {
+				changed := false
+				for i := range sess.Rewards {
+					if sess.Rewards[i].Key == "gacha_point" && sess.Rewards[i].Count > 0 {
+						sess.Rewards[i].Count = int(cn35game.ApplyFateRateBonus(int64(sess.Rewards[i].Count), rate))
+						changed = true
+					}
+				}
+				if changed {
+					if rewardsJSON, err = json.Marshal(sess.Rewards); err != nil {
+						return err
+					}
+				}
+			}
+		}
 		// RUNE350-03：符文本逐怪符文摇奖在队伍解析同事务完成——收集
 		// 符文（skill_id 30）因子按参战装备符文乘算，摇中明细记
 		// sess.RuneDrops（appear_table 注入用）并入账级 skill 奖励

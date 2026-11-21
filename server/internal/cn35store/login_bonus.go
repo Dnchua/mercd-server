@@ -55,6 +55,9 @@ func (s *Store) SpringState(userID string, nowSec int64) (*cn35game.SpringState,
 		}
 		anchor := cn35game.SpringAnchorSec(receivable, created, nowSec)
 		gold, guild, bp := cn35game.SpringPending(anchor, nowSec)
+		if fb := s.fateBonusMapTx(tx, userID, cn35game.FatePeriodKey(time.Unix(nowSec, 0))); len(fb) > 0 {
+			gold = cn35game.ApplyFateRateBonus(gold, fb["gold_drop_spring"])
+		}
 		st = &cn35game.SpringState{
 			AnchorSec:     anchor,
 			Gold:          gold,
@@ -83,6 +86,9 @@ func (s *Store) ClaimSpring(userID string, nowSec int64) (*cn35game.SpringClaimR
 		}
 		anchor := cn35game.SpringAnchorSec(receivable, created, nowSec)
 		gold, guild, bp := cn35game.SpringPending(anchor, nowSec)
+		if fb := s.fateBonusMapTx(tx, userID, cn35game.FatePeriodKey(time.Unix(nowSec, 0))); len(fb) > 0 {
+			gold = cn35game.ApplyFateRateBonus(gold, fb["gold_drop_spring"])
+		}
 		if !cn35game.SpringReady(gold, guild, bp) {
 			return cn35game.ErrLoginBonusNotReady
 		}
@@ -111,14 +117,21 @@ func (s *Store) ClaimSpring(userID string, nowSec int64) (*cn35game.SpringClaimR
 				return fmt.Errorf("cn35store: 泉水 BP 入账失败: %w", err)
 			}
 		}
+		medal, merr := cn35game.RollSpringMedal(s.springRand)
+		if merr != nil {
+			return merr
+		}
+		if err := creditBalanceTx(tx, userID, "medal", medal); err != nil {
+			return fmt.Errorf("cn35store: 泉水徽章入账失败: %w", err)
+		}
 		if _, err := tx.Exec(`INSERT INTO cn35_spring_claims
-			(user_id,claimed_at,anchor_before_sec,gold,guild_asset,battle_point,next_receivable_sec)
-			VALUES (?,?,?,?,?,?,?)`,
-			userID, nowSec, anchor, gold, guild, bp, next); err != nil {
+			(user_id,claimed_at,anchor_before_sec,gold,guild_asset,battle_point,medal,next_receivable_sec)
+			VALUES (?,?,?,?,?,?,?,?)`,
+			userID, nowSec, anchor, gold, guild, bp, medal, next); err != nil {
 			return fmt.Errorf("cn35store: 泉水领取台账写入失败: %w", err)
 		}
 		res.Granted = true
-		res.Gold, res.GuildAsset, res.BattlePoint = gold, guild, bp
+		res.Gold, res.GuildAsset, res.BattlePoint, res.Medal = gold, guild, bp, medal
 		return nil
 	})
 	if err != nil {

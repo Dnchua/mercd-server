@@ -18,6 +18,8 @@ import (
 var testAccepted = map[string]bool{
 	"storyactress/storyactress10002":     true,
 	"storybackground/storybackground2_2": true,
+	"unit/unit_large_ns_414":             true,
+	"sound/B-7":                          true,
 }
 
 // storyFixtureDoc 构造一话合法响应体（顶层 story/asset_names/actress_xys）。
@@ -29,7 +31,7 @@ func storyFixtureDoc(id, chapter, order int) map[string]any {
 			"scenes_map_array": []any{
 				map[string]any{
 					"text":       "“测试台词”",
-					"center":     map[string]any{"id": 10002},
+					"center":     map[string]any{"id": 10002, "expression": "tujo"},
 					"background": "2", "timezone": "2",
 				},
 			},
@@ -122,6 +124,38 @@ func TestLoadStoryCatalogOK(t *testing.T) {
 	}
 }
 
+// TestLoadStoryCatalogMemorialFields 纪念版移植形态：scoutactress 读
+// unit/unit_large_ns_<id>，bgm 与其包同列 asset_names 时通过。
+func TestLoadStoryCatalogMemorialFields(t *testing.T) {
+	dir := t.TempDir()
+	doc := storyFixtureDoc(1, 1, 1)
+	doc["asset_names"] = []any{
+		"sound/B-7",
+		"storyactress/storyactress10002",
+		"storybackground/storybackground2_2",
+		"unit/unit_large_ns_414",
+	}
+	doc["actress_xys"] = map[string]any{
+		"actress_xy_10002": map[string]any{"xy": map[string]any{"x": 0, "y": 0}},
+		"actress_xy_414":   map[string]any{"xy": map[string]any{"x": 0, "y": 0}},
+	}
+	doc["story"].(map[string]any)["scenes_map_array"] = []any{
+		map[string]any{
+			"text": "「测试台词」", "background": "2", "timezone": "2", "bgm": "sound/B-7",
+			"window_type": "shout", "effect": "Shake",
+			"left":  map[string]any{"id": 10002, "type": "navi", "expression": "tujo", "active": true},
+			"right": map[string]any{"id": 414, "type": "scoutactress", "active": false},
+		},
+	}
+	writeStoryFixture(t, dir,
+		[]map[string]any{storyIndexEntryFor(1, 1, 1)},
+		map[int]map[string]any{1: doc})
+	cat := loadStoryCatalog(dir, testAccepted)
+	if len(cat.diagnostics) != 0 || cat.stories[1] == nil {
+		t.Fatalf("纪念版字段形态应通过: %v", diagReasons(cat))
+	}
+}
+
 func TestLoadStoryCatalogRejections(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -139,10 +173,30 @@ func TestLoadStoryCatalogRejections(t *testing.T) {
 			d["actress_xys"] = map[string]any{"actress_xy_10003": map[string]any{}}
 			d["story"].(map[string]any)["scenes_map_array"] = []any{
 				map[string]any{"text": "“xy”",
-					"center":     map[string]any{"id": 10003},
+					"center":     map[string]any{"id": 10003, "expression": "tujo"},
 					"background": "2", "timezone": "2"},
 			}
 		}, "缺资源 storyactress/storyactress10003"},
+		{"立绘包未列入 asset_names", func(d map[string]any) {
+			d["asset_names"] = []any{"storybackground/storybackground2_2"}
+		}, "未列入 asset_names"},
+		{"立绘 expression 为空", func(d map[string]any) {
+			d["story"].(map[string]any)["scenes_map_array"].([]any)[0].(map[string]any)["center"] = map[string]any{"id": 10002, "expression": ""}
+		}, "expression 为空"},
+		{"scoutactress 缺 unit_large_ns", func(d map[string]any) {
+			d["actress_xys"] = map[string]any{"actress_xy_10002": map[string]any{}}
+			d["story"].(map[string]any)["scenes_map_array"] = []any{
+				map[string]any{"text": "“xy”",
+					"center":     map[string]any{"id": 10002, "type": "scoutactress"},
+					"background": "2", "timezone": "2"},
+			}
+		}, "缺资源 unit/unit_large_ns_10002"},
+		{"BGM 未下发", func(d map[string]any) {
+			d["story"].(map[string]any)["scenes_map_array"].([]any)[0].(map[string]any)["bgm"] = "sound/B-999"
+		}, "缺 BGM 资源 sound/B-999"},
+		{"BGM 未列入 asset_names", func(d map[string]any) {
+			d["story"].(map[string]any)["scenes_map_array"].([]any)[0].(map[string]any)["bgm"] = "sound/B-7"
+		}, "BGM sound/B-7 未列入 asset_names"},
 		{"空场景", func(d map[string]any) {
 			d["story"].(map[string]any)["scenes_map_array"] = []any{}
 		}, "scenes_map_array"},

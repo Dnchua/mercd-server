@@ -1,0 +1,1118 @@
+{
+  "nav.guild": {
+    "selector": {
+      "attrs": {
+        "text": "公会"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "nav.home": {
+    "selector": {
+      "attrs": {
+        "text": "旅馆"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "modal.yes": {
+    "selector": {
+      "attrs": {
+        "text": "是"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "modal.no": {
+    "selector": {
+      "attrs": {
+        "text": "否"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "modal.ok": {
+    "selector": {
+      "attrs": {
+        "text": "确定"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "modal.close": {
+    "selector": {
+      "attrs": {
+        "name": "ButtonClose"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "login.start": {
+    "selector": {
+      "attrs": {
+        "text": "Game Start"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.create": {
+    "selector": {
+      "attrs": {
+        "text": "创建公会"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.create.submit": {
+    "selector": {
+      "attrs": {
+        "text": "创建"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.name.input": {
+    "selector": {
+      "attrs": {
+        "name": "InputName"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.search": {
+    "selector": {
+      "attrs": {
+        "text": "搜索公会"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.search.input": {
+    "selector": {
+      "attrs": {
+        "name": "InputGuildName"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.search.submit": {
+    "selector": {
+      "attrs": {
+        "text": "搜索"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.result": {
+    "selector": {
+      "attrs": {
+        "text": "${guild_name}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.join": {
+    "selector": {
+      "attrs": {
+        "text": "加入"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.apply": {
+    "selector": {
+      "attrs": {
+        "text": "申请"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.members": {
+    "selector": {
+      "attrs": {
+        "text": "公会成员"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.applicants": {
+    "selector": {
+      "attrs": {
+        "text": "公会入会申请者"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.approve": {
+    "selector": {
+      "attrs": {
+        "text": "批准"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.reject": {
+    "selector": {
+      "attrs": {
+        "text": "拒绝"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.reject_all": {
+    "selector": {
+      "attrs": {
+        "text": "全部拒绝"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.settings": {
+    "selector": {
+      "attrs": {
+        "text": "公会设置"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.memo.input": {
+    "selector": {
+      "attrs": {
+        "name": "InputMemo"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.settings.save": {
+    "selector": {
+      "attrs": {
+        "text": "保存"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.memo": {
+    "selector": {
+      "attrs": {
+        "text": "${memo}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.approval.manual": {
+    "selector": {
+      "attrs": {
+        "text": "需要批准"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.member.b": {
+    "selector": {
+      "attrs": {
+        "text": "${B_name}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.member.a": {
+    "selector": {
+      "attrs": {
+        "text": "${A_name}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.role.sub": {
+    "selector": {
+      "attrs": {
+        "text": "任命副会长"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.role.fire": {
+    "selector": {
+      "attrs": {
+        "text": "解除副会长"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.role.master": {
+    "selector": {
+      "attrs": {
+        "text": "禅让会长"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.kick": {
+    "selector": {
+      "attrs": {
+        "text": "踢出公会"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.dropout": {
+    "selector": {
+      "attrs": {
+        "text": "退出公会"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.unjoined": {
+    "selector": {
+      "attrs": {
+        "text": "创建公会"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.invite.search": {
+    "selector": {
+      "attrs": {
+        "text": "搜索公会成员"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "waiting.register": {
+    "selector": {
+      "attrs": {
+        "text": "登记"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "waiting.invite": {
+    "selector": {
+      "attrs": {
+        "text": "邀请"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "waiting.inbox": {
+    "selector": {
+      "attrs": {
+        "text": "邀请信息"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "waiting.accept": {
+    "selector": {
+      "attrs": {
+        "text": "接受"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "waiting.reject": {
+    "selector": {
+      "attrs": {
+        "text": "拒绝"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.equipment": {
+    "selector": {
+      "attrs": {
+        "text": "设施投资"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "equip.next": {
+    "selector": {
+      "attrs": {
+        "name": "ButtonNext"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "equip.invest": {
+    "selector": {
+      "attrs": {
+        "text": "投资"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "equip.amount.100": {
+    "selector": {
+      "attrs": {
+        "text": "+100"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "equip.amount.all": {
+    "selector": {
+      "attrs": {
+        "text": "全部"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.defense": {
+    "selector": {
+      "attrs": {
+        "text": "防御魔宠设定"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "defense.monster": {
+    "selector": {
+      "attrs": {
+        "name": "MonsterRow"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "defense.slot": {
+    "selector": {
+      "attrs": {
+        "name": "GuildDeckSlot"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "defense.assign": {
+    "selector": {
+      "attrs": {
+        "text": "设定"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "defense.remove": {
+    "selector": {
+      "attrs": {
+        "text": "移除"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "bp.storage": {
+    "selector": {
+      "attrs": {
+        "text": "蓄水库"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "bp.confirm": {
+    "selector": {
+      "attrs": {
+        "text": "要取出BP吗？"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "bp.refuse": {
+    "selector": {
+      "attrs": {
+        "text": "现在，无法从蓄水库中取出BP。"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "bp.success": {
+    "selector": {
+      "attrs": {
+        "textMatches": ".*取出了.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.own": {
+    "selector": {
+      "attrs": {
+        "text": "${guild_name}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.enemy": {
+    "selector": {
+      "attrs": {
+        "text": "${enemy_guild_name}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.enemy2": {
+    "selector": {
+      "attrs": {
+        "text": "${enemy_guild_name2}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.enemy3": {
+    "selector": {
+      "attrs": {
+        "text": "${enemy_guild_name3}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.pray": {
+    "selector": {
+      "attrs": {
+        "text": "祈祷"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.help": {
+    "selector": {
+      "attrs": {
+        "text": "支援"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.execute": {
+    "selector": {
+      "attrs": {
+        "text": "出击"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.start": {
+    "selector": {
+      "attrs": {
+        "text": "开始战斗"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.victory": {
+    "selector": {
+      "attrs": {
+        "text": "胜利"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.defeat": {
+    "selector": {
+      "attrs": {
+        "text": "败北"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.difficulty": {
+    "selector": {
+      "attrs": {
+        "text": "${difficulty_name}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.chat": {
+    "selector": {
+      "attrs": {
+        "text": "会战聊天室"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "chat.input": {
+    "selector": {
+      "attrs": {
+        "name": "Input"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "chat.send": {
+    "selector": {
+      "attrs": {
+        "text": "发送"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "chat.marker": {
+    "selector": {
+      "attrs": {
+        "textMatches": ".*${marker}.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rank.open": {
+    "selector": {
+      "attrs": {
+        "text": "公会战排行"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rank.items": {
+    "selector": {
+      "attrs": {
+        "text": "物品奖励"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rank.skills": {
+    "selector": {
+      "attrs": {
+        "text": "符文奖励"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rank.my": {
+    "selector": {
+      "attrs": {
+        "text": "本公会"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rank.previous": {
+    "selector": {
+      "attrs": {
+        "text": "${previous_month_label}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rank.item.first": {
+    "selector": {
+      "attrs": {
+        "text": "250,000"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rank.skill.first": {
+    "selector": {
+      "attrs": {
+        "text": "士气符文"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "rank.history.guild": {
+    "selector": {
+      "attrs": {
+        "text": "${guild_name}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.offwindow": {
+    "selector": {
+      "attrs": {
+        "text": "今日高挂免战牌"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.day.previous": {
+    "selector": {
+      "attrs": {
+        "name": "gw.day.previous"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "equip.temporary": {
+    "selector": {
+      "attrs": {
+        "text": "临时设施"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "equip.sp": {
+    "selector": {
+      "attrs": {
+        "text": "祭坛"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "equip.hp": {
+    "selector": {
+      "attrs": {
+        "text": "医疗所"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "equip.at": {
+    "selector": {
+      "attrs": {
+        "text": "训练所"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "equip.taghness": {
+    "selector": {
+      "attrs": {
+        "text": "食堂"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "equip.bp_storage": {
+    "selector": {
+      "attrs": {
+        "text": "蓄水库"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.shift.monday": {
+    "selector": {
+      "attrs": {
+        "name": "ShiftMonday"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.shifts.save": {
+    "selector": {
+      "attrs": {
+        "text": "保存"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.push": {
+    "selector": {
+      "attrs": {
+        "text": "推送通知"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.pause": {
+    "selector": {
+      "attrs": {
+        "name": "ButtonPause"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.retreat": {
+    "selector": {
+      "attrs": {
+        "text": "放弃战斗"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.weak_party": {
+    "selector": {
+      "attrs": {
+        "text": "${weak_party_name}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gw.strong_party": {
+    "selector": {
+      "attrs": {
+        "text": "${strong_party_name}"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "guild.approval.auto": {
+    "selector": {
+      "attrs": {
+        "text": "自动批准"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "nav.units": {
+    "selector": {
+      "attrs": {
+        "text": "同伴"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "nav.monsters": {
+    "selector": {
+      "attrs": {
+        "text": "魔宠"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "nav.menu": {
+    "selector": {
+      "attrs": {
+        "name": "MenuButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "home.present_box": {
+    "selector": {
+      "attrs": {
+        "name": "PresentBoxButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "present.receive_all": {
+    "selector": {
+      "attrs": {
+        "text": "全部领取"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "home.function_portal": {
+    "selector": {
+      "attrs": {
+        "name": "FunctionPortalButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "portal.right_list": {
+    "selector": {
+      "attrs": {
+        "name": "RightListParts"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "home.login_bonus_spring": {
+    "selector": {
+      "attrs": {
+        "name": "IconSpring"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "portal.login_bonus": {
+    "selector": {
+      "attrs": {
+        "text": "不可思议之泉"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "login_bonus.receive": {
+    "selector": {
+      "attrs": {
+        "text": "领取"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "menu.user_profile": {
+    "selector": {
+      "attrs": {
+        "name": "014MyUserPage"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "user.memo.input": {
+    "selector": {
+      "attrs": {
+        "name": "TextAreaInput"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "user.memo.submit": {
+    "selector": {
+      "attrs": {
+        "text": "修改签名"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "units.menu.list": {
+    "selector": {
+      "attrs": {
+        "name": "001Unit"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "units.menu.decks": {
+    "selector": {
+      "attrs": {
+        "name": "004Deck"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "units.menu.skills": {
+    "selector": {
+      "attrs": {
+        "name": "003Skill"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "unit.row.primary": {
+    "selector": {
+      "attrs": {
+        "text": "㊥甜蜜偶像\n糖心"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "unit.detail.set_leader": {
+    "selector": {
+      "attrs": {
+        "name": "SetLeaderButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "unit.detail.set_helper": {
+    "selector": {
+      "attrs": {
+        "name": "SetHelperButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "unit.detail.protect": {
+    "selector": {
+      "attrs": {
+        "name": "SetProtectButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "unit.detail.training": {
+    "selector": {
+      "attrs": {
+        "name": "CompositeButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "unit.training.execute": {
+    "selector": {
+      "attrs": {
+        "name": "LevelupButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "deck.slot.first": {
+    "selector": {
+      "attrs": {
+        "name": "UserUnitListRow(Clone)"
+      },
+      "offspring": [
+        {
+          "text": "㊥甜蜜偶像\n糖心"
+        }
+      ]
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "monsters.menu.list": {
+    "selector": {
+      "attrs": {
+        "name": "002Monster"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "monsters.menu.evolve": {
+    "selector": {
+      "attrs": {
+        "text": "魔宠进化"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "monster.row.primary": {
+    "selector": {
+      "attrs": {
+        "text": "グラスプス"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "monster.detail.equip": {
+    "selector": {
+      "attrs": {
+        "name": "UnitInfo"
+      },
+      "offspring": [
+        {
+          "name": "Button"
+        }
+      ]
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "monster.detail.powerup": {
+    "selector": {
+      "attrs": {
+        "name": "PowerupButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "monster.powerup.execute": {
+    "selector": {
+      "attrs": {
+        "name": "PowerupButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "monster.evolve.title": {
+    "selector": {
+      "attrs": {
+        "text": "魔宠进化"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "skill.row.primary": {
+    "selector": {
+      "attrs": {
+        "name": "SkillListRow"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "skill.detail.protect": {
+    "selector": {
+      "attrs": {
+        "name": "SetProtectButton"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "skill.equip.open": {
+    "selector": {
+      "attrs": {
+        "text": "装备符文"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "skill.equip.confirm": {
+    "selector": {
+      "attrs": {
+        "text": "确定装备"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "menu.user_items": {
+    "selector": {
+      "attrs": {
+        "name": "007Item"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "item.tab.other": {
+    "selector": {
+      "attrs": {
+        "name": "List6Button"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "item.potion_ap.use": {
+    "selector": {
+      "attrs": {
+        "text": "使用"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "item.tab.upgrade": {
+    "selector": {
+      "attrs": {
+        "text": "进化素材"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "item.upgrade.compose": {
+    "selector": {
+      "attrs": {
+        "text": "合成"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "menu.albums": {
+    "selector": {
+      "attrs": {
+        "name": "005Album"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "album.unit.first": {
+    "selector": {
+      "attrs": {
+        "text": "㊥甜蜜偶像\n糖心"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "album.unit.detail": {
+    "selector": {
+      "attrs": {
+        "name": "AlbumUnitDetail"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "menu.scroll_area": {
+    "selector": {
+      "attrs": {
+        "name": "DraggablePanel"
+      },
+      "offspring": [
+        {
+          "name": "ButtonTable"
+        }
+      ]
+    }
+  },
+  "unit.row.second": {
+    "selector": {
+      "attrs": {
+        "text": "㊥虚烬之铳\n佐基利尔德"
+      }
+    }
+  },
+  "unit.row.third": {
+    "selector": {
+      "attrs": {
+        "text": "㊥囚牢的魔王\n妮尔特拉"
+      }
+    }
+  }
+}

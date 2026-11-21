@@ -72,9 +72,13 @@ func (s *Store) unitWaitingColumn() bool {
 // 不存在，此时退回旧列集并把 Size 一律置 nil——不报错、不迁移、不代填。
 func (s *Store) Monsters(userID string) ([]cn35game.MonsterRecord, error) {
 	withSize := s.monsterSizeColumns()
+	withFusion := s.monsterFusionColumn()
 	cols := `uuid,monster_id,unit_id,level,protected`
 	if withSize {
 		cols += `,scale,real_scale,scale_limit,is_rare`
+	}
+	if withFusion {
+		cols += `,fusion_degrees`
 	}
 	rows, err := s.db.Query(`SELECT `+cols+`
 		FROM cn35_player_monsters WHERE user_id=? ORDER BY uuid`, userID)
@@ -92,6 +96,9 @@ func (s *Store) Monsters(userID string) ([]cn35game.MonsterRecord, error) {
 		dest := []any{&r.UUID, &r.MonsterID, &unitID, &r.Level, &prot}
 		if withSize {
 			dest = append(dest, &scale, &realScale, &scaleLimit, &isRare)
+		}
+		if withFusion {
+			dest = append(dest, &r.FusionDegrees)
 		}
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
@@ -131,6 +138,16 @@ func (s *Store) monsterSizeColumns() bool {
 		s.hasSizeCol = err == nil && n == 1
 	})
 	return s.hasSizeCol
+}
+
+func (s *Store) monsterFusionColumn() bool {
+	s.fusionColOnce.Do(func() {
+		var n int
+		err := s.db.QueryRow(
+			`SELECT count(*) FROM pragma_table_info('cn35_player_monsters') WHERE name='fusion_degrees'`).Scan(&n)
+		s.hasFusionCol = err == nil && n == 1
+	})
+	return s.hasFusionCol
 }
 
 // InsertUnitTx 事务内插入一条单位库存行；模板有效性已由调用方

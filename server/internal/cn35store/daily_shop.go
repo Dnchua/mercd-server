@@ -77,3 +77,39 @@ func (s *Store) claimDailyPack(userID, goodsKey, periodKey string, coin int64, l
 	})
 	return balance, err
 }
+
+// BuyScoutBook 单事务扣除钻石兑换骑士契约书（scout_book_1）。
+func (s *Store) BuyScoutBook(userID string, count, unitDiamondCost int64) (int64, int64, error) {
+	if userID == "" || count <= 0 || unitDiamondCost <= 0 {
+		return 0, 0, fmt.Errorf("%w: count=%d cost=%d",
+			cn35game.ErrInvalidRequest, count, unitDiamondCost)
+	}
+	totalCost := count * unitDiamondCost
+	var coinAfter, bookAfter int64
+	err := s.withTx(func(tx *sql.Tx) error {
+		var exists int
+		if err := tx.QueryRow(`SELECT count(*) FROM cn35_accounts WHERE user_id=?`, userID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists != 1 {
+			return cn35game.ErrNoAccount
+		}
+		up, err := tx.Exec(`UPDATE cn35_player_balances
+			SET amount=amount-?,updated_at=?
+			WHERE user_id=? AND currency='coin' AND amount>=?`,
+			totalCost, nowUTC(), userID, totalCost)
+		if err != nil {
+			return err
+		}
+		if n, _ := up.RowsAffected(); n != 1 {
+			return cn35game.ErrDailyShopInsufficientCoin
+		}
+		if err := creditBalanceTx(tx, userID, "scout_book_1", count); err != nil {
+			return err
+		}
+		coinAfter = balanceOfTx(tx, userID, "coin")
+		bookAfter = balanceOfTx(tx, userID, "scout_book_1")
+		return nil
+	})
+	return coinAfter, bookAfter, err
+}

@@ -75,9 +75,10 @@ type gachaPoolRules struct {
 	Description string
 	// Price 见 gachaPrice。
 	Price gachaPrice
-	// MaxExecutableCount 是连抽按钮的基准次数（下发 max_executable_count）。
+	// MaxExecutableCount 是连抽按钮的基准扣费次数（下发 max_executable_count；
+	// 十连 9 折时为 9，实际抽取数为 MaxExecutableCount + MaxExecuteBonus = 10）。
 	MaxExecutableCount int
-	// MaxExecuteBonus 首期为 0（关闭"买十赠一"），下发 max_execute_bonus。
+	// MaxExecuteBonus 十连赠送抽数（十连 9 折时为 1，无折扣时为 0），下发 max_execute_bonus。
 	MaxExecuteBonus int
 	// FeaturedURIDs 是当期 UP 的五星集合。空集合=非 UP 池。
 	// 首期只允许一个 UP 五星（设计 §3.4）。
@@ -293,8 +294,12 @@ func (r gachaRules) validate() error {
 			return fmt.Errorf("gacha rules: 池 %q max_executable_count=%d 越界（客户端连抽上限 10）",
 				p.PoolID, p.MaxExecutableCount)
 		}
-		if p.MaxExecuteBonus != 0 {
-			return fmt.Errorf("gacha rules: 池 %q max_execute_bonus=%d，首期必须为 0（关闭买十赠一）",
+		if p.MaxExecuteBonus < 0 || p.MaxExecuteBonus > 2 || p.MaxExecutableCount+p.MaxExecuteBonus > 10 {
+			return fmt.Errorf("gacha rules: 池 %q max_executable_count=%d max_execute_bonus=%d 越界（总连抽上限 10）",
+				p.PoolID, p.MaxExecutableCount, p.MaxExecuteBonus)
+		}
+		if p.MaxExecuteBonus > 0 && p.MaxExecutableCount < 2 {
+			return fmt.Errorf("gacha rules: 池 %q 启用赠送抽(%d)时基准连抽次数须 >=2",
 				p.PoolID, p.MaxExecuteBonus)
 		}
 		if p.Limited {

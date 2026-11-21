@@ -61,11 +61,12 @@ const normalScaleBoundM = 1700
 func (s *Store) monsterPowerup(userID, uuid string, attrID, powerupItemID, count int) (*cn35game.MonsterPowerupResult, error) {
 	res := &cn35game.MonsterPowerupResult{UUID: uuid}
 	err := s.withTx(func(tx *sql.Tx) error {
-		var scale, realScale sql.NullString
+		var monsterID int
+		var scale, realScale, scaleLimit sql.NullString
 		var isRare sql.NullInt64
-		err := tx.QueryRow(`SELECT scale,real_scale,is_rare
+		err := tx.QueryRow(`SELECT monster_id,scale,real_scale,scale_limit,is_rare
 			FROM cn35_player_monsters WHERE user_id=? AND uuid=?`,
-			userID, uuid).Scan(&scale, &realScale, &isRare)
+			userID, uuid).Scan(&monsterID, &scale, &realScale, &scaleLimit, &isRare)
 		if errors.Is(err, sql.ErrNoRows) {
 			return cn35game.ErrMonsterNotOwned
 		}
@@ -89,14 +90,99 @@ func (s *Store) monsterPowerup(userID, uuid string, attrID, powerupItemID, count
 		if err != nil {
 			return fmt.Errorf("cn35store: 魔宠 %s real_scale 非法: %w", uuid, err)
 		}
+		curM := int(math.Round(cur * 1000))
 		if isRare.Valid && isRare.Int64 == 1 {
-			// 稀有魔宠成本表 rare_monster_category_config 未下发，
-			// 拒绝交易而不是按老魔宠价格错收（stat-ownership 决策）。
-			return cn35game.ErrMonsterRarePowerup
+			if !scaleLimit.Valid && cn35game.MonsterBatch(monsterID) < 0 {
+				return cn35game.ErrMonsterRarePowerup
+			}
+			limitF := cn35game.DefaultFusionMonsterScaleLimit(monsterID)
+			if scaleLimit.Valid && scaleLimit.String != "" {
+				if lf, lerr := strconv.ParseFloat(scaleLimit.String, 64); lerr == nil && lf > 0 {
+					limitF = lf
+				}
+			}
+			limitM := int(math.Round(limitF * 1000))
+			if curM >= limitM || curM >= 2300 {
+				return cn35game.ErrMonsterScaleCap
+			}
+			var wantForm, boundM, itemPerStep int
+			var goldPerStep int64
+			switch {
+			case curM <= 1549:
+				wantForm, boundM, itemPerStep, goldPerStep = 1, 1549, 2, 1000
+			case curM <= 1699:
+				wantForm, boundM, itemPerStep, goldPerStep = 2, 1699, 2, 2000
+			case curM <= 1799:
+				wantForm, boundM, itemPerStep, goldPerStep = 2, 1799, 2, 5000
+			case curM <= 1899:
+				wantForm, boundM, itemPerStep, goldPerStep = 3, 1899, 3, 10000
+			case curM <= 2099:
+				wantForm, boundM, itemPerStep, goldPerStep = 3, 2099, 4, 20000
+			case curM <= 2299:
+				wantForm, boundM, itemPerStep, goldPerStep = 3, 2299, 5, 50000
+			default:
+				return cn35game.ErrMonsterScaleCap
+			}
+			if elem != attrID || form != wantForm {
+				return cn35game.ErrMonsterPowerupItem
+			}
+			const rareStepM = 10 // 融合宠 +0.01/次（ScaleCategory.SCALE_INCREASE_AMOUNT_New）
+			maxCatSteps := (boundM - curM + rareStepM - 1) / rareStepM
+			if maxCatSteps < 1 {
+				maxCatSteps = 1
+			}
+			maxLimitSteps := (limitM - curM + rareStepM - 1) / rareStepM
+			if maxLimitSteps < 1 {
+				maxLimitSteps = 1
+			}
+			maxSteps := maxCatSteps
+			if maxLimitSteps < maxSteps {
+				maxSteps = maxLimitSteps
+			}
+			// MonsterPowerupModal.cs:32,65,184 将 count 作为消耗素材总件数（count = steps * itemCostSingle）上报；
+			// 若调用方传入的是总素材件数（count >= itemPerStep），按 count / itemPerStep 换算步数。
+			reqSteps := count / itemPerStep
+			if reqSteps < 1 {
+				reqSteps = 1
+			}
+			exec := reqSteps
+			if exec > maxSteps {
+				exec = maxSteps
+			}
+			totalItems := exec * itemPerStep
+			totalGold := int64(exec) * goldPerStep
+			if err := debitItemTx(tx, userID, itemKey, totalItems); err != nil {
+				return err
+			}
+			if totalGold > 0 {
+				gRes, gerr := tx.Exec(`UPDATE cn35_player_balances
+					SET amount=amount-?, updated_at=?
+					WHERE user_id=? AND currency='gacha_point' AND amount>=?`,
+					totalGold, nowUTC(), userID, totalGold)
+				if gerr != nil {
+					return gerr
+				}
+				if n, _ := gRes.RowsAffected(); n != 1 {
+					return cn35game.ErrCurrencyInsufficient
+				}
+			}
+			next := cur + 0.01*float64(exec)
+			str := formatScale(next)
+			up, err := tx.Exec(`UPDATE cn35_player_monsters
+				SET scale=?,real_scale=?,updated_at=? WHERE user_id=? AND uuid=?`,
+				str, str, nowUTC(), userID, uuid)
+			if err != nil {
+				return err
+			}
+			if n, _ := up.RowsAffected(); n != 1 {
+				return cn35game.ErrMonsterNotOwned
+			}
+			res.Scale, res.RealScale = str, str
+			res.ChargedCount = totalItems
+			return nil
 		}
 		// 千分比整型算术，避免十进制→二进制浮点误差吃掉可执行步数。
 		const stepM = 20 // 普通魔宠 0.02/次
-		curM := int(math.Round(cur * 1000))
 		// 档位→所需素材档位（ScaleCategory 构造器同口径）：
 		// ≤1.35 种子 / ≤1.55 花蕾 / ≤1.70 花；>1.70 id==4 封顶
 		// （战斗掉落超限个体天然不可强化）。

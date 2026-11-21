@@ -229,7 +229,7 @@ func TestUnsupportedWriteModal(t *testing.T) {
 		"/user_units/compose/decompose_upgrade_item",
 		"/user_monsters/sell", "/user_monsters/powerup", "/user_monsters/evolve",
 		"/user_monsters/evolve_egg", "/user_monsters/evolve_monster_select_info",
-		"/user_monsters/show_evolve_board", "/user_monsters/share",
+		"/user_monsters/share",
 	} {
 		doc := gameJSON(t, ts.URL, p, uid, sk, s0, s1, "", "_method=GET")
 		assertModalError(t, doc, p)

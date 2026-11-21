@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Dnchua/mercd-server/server/internal/cardcatalog"
 	"github.com/Dnchua/mercd-server/server/internal/cn35game"
@@ -559,16 +560,15 @@ func TestGachaPoolsViaRequireData(t *testing.T) {
 			}
 		}
 	}
-	// ROSTER350-02：旧槽 1/4 停用不入已发布版本，只下发钻石(槽2)+金币(槽3)。
-	for _, slot := range []int{2, 3} {
+	// M7：槽1 为每日轮换特殊招募（101..133），槽2 为骑士契约书/钻石常驻池，槽3 为金币池；
+	// 停用槽4 不下发。
+	for _, slot := range []int{1, 2, 3} {
 		if !seen[slot] {
-			t.Fatalf("槽 %d 无池（启用双池必须下发）", slot)
+			t.Fatalf("槽 %d 无池（每日特殊招募+常驻双池必须下发）", slot)
 		}
 	}
-	for _, slot := range []int{1, 4} {
-		if seen[slot] {
-			t.Fatalf("停用槽 %d 不应下发池文档", slot)
-		}
+	if seen[4] {
+		t.Fatalf("停用槽 4 不应下发池文档")
 	}
 	if _, ok := data["gacha_warnings"]; !ok {
 		t.Fatal("/gachas 缺 gacha_warnings")
@@ -628,6 +628,15 @@ func TestGachaAvailableUnitsDocs(t *testing.T) {
 	wantRarities := map[string]map[int]bool{
 		"2": {30: true, 40: true, 50: true},
 		"3": {10: true, 20: true, 30: true, 40: true},
+	}
+	if gachas, ok := data["gachas"].([]any); ok {
+		for _, raw := range gachas {
+			p := raw.(map[string]any)
+			pid := idStr(p["id"])
+			if lt, _ := asFloat(p["list_type_id"]); int(lt) == 0 && pid != "2" && pid != "3" {
+				wantRarities[pid] = map[int]bool{30: true, 40: true, 50: true}
+			}
+		}
 	}
 	for _, pid := range []string{"1", "4"} {
 		if _, ok := data["gacha_available_units_"+pid]; ok {
@@ -729,12 +738,18 @@ func TestGachaPoolDocPriceMatchesRules(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	pools := data["gachas"].([]any)
 
-	// 已发布版本是文档真源：期望值从测试库读回，避免两处各写。
-	stCfg, err := st.ActiveGachaConfig()
-	if err != nil || stCfg == nil {
-		t.Fatalf("读已发布配置: %v nil=%v", err, stCfg == nil)
+	// 已发布版本叠加当日特殊招募主题池是文档真源。
+	cat, cerr := cardcatalog.Load(filepath.Join("..", "..", "assets", "shared", "cards"))
+	if cerr != nil {
+		t.Fatalf("加载 catalog: %v", cerr)
 	}
-	want := cn35game.GachaPoolDocumentsForTest(stCfg)
+	want, _, err := cn35game.GachaResolvedPoolsForTest(cn35game.Deps{
+		Catalog:     cn35game.NewRosterCatalog(cat, st),
+		GachaConfig: st,
+	}, time.Now())
+	if err != nil || len(want) == 0 {
+		t.Fatalf("读运行期配置: %v len=%d", err, len(want))
+	}
 	if len(pools) != len(want) {
 		t.Fatalf("池数=%d want %d", len(pools), len(want))
 	}
@@ -963,12 +978,18 @@ func TestGachaPoolsEndpointServesRequireData(t *testing.T) {
 	if _, ok := data["gacha_button_options"]; !ok {
 		t.Fatal("/gachas 缺 gacha_button_options")
 	}
-	// 与已发布版本同源（ROSTER350：启用双池；停用槽 1/4 不下发）。
-	stCfg, err := st.ActiveGachaConfig()
-	if err != nil || stCfg == nil {
-		t.Fatalf("读已发布配置: %v nil=%v", err, stCfg == nil)
+	// 与运行期已发布版本+当日轮换特殊招募同源。
+	cat, cerr := cardcatalog.Load(filepath.Join("..", "..", "assets", "shared", "cards"))
+	if cerr != nil {
+		t.Fatalf("加载 catalog: %v", cerr)
 	}
-	want := cn35game.GachaPoolDocumentsForTest(stCfg)
+	want, _, err := cn35game.GachaResolvedPoolsForTest(cn35game.Deps{
+		Catalog:     cn35game.NewRosterCatalog(cat, st),
+		GachaConfig: st,
+	}, time.Now())
+	if err != nil || len(want) == 0 {
+		t.Fatalf("读运行期配置: %v len=%d", err, len(want))
+	}
 	if len(pools) != len(want) {
 		t.Fatalf("/gachas 池数=%d 规则=%d", len(pools), len(want))
 	}
@@ -1002,10 +1023,10 @@ func TestGachaDescriptionNewlineEscaping(t *testing.T) {
 		if desc == "" {
 			t.Fatalf("池 %v 描述为空", p["id"])
 		}
-		// 解析后的 JSON 字符串里应含「反斜杠+n」两字符序列，
-		// 供客户端 Replace("\\n", "\n") 命中。
-		if !strings.Contains(desc, `\n`) {
-			t.Fatalf("池 %v 描述缺少可被客户端 Replace 命中的 \\\\n 序列: %q", p["id"], desc)
+		// 解析后的 JSON 字符串里应含「双反斜杠+n」三字符序列，
+		// 供客户端 GachaIndexParts.cs:419 的 Replace("\\\\n", "\n") 命中。
+		if !strings.Contains(desc, `\\n`) {
+			t.Fatalf("池 %v 描述缺少可被客户端 Replace 命中的 \\\\\\\\n 序列: %q", p["id"], desc)
 		}
 		// 不能含真实换行——客户端只认字面 \\n。
 		if strings.ContainsAny(desc, "\r\n") {

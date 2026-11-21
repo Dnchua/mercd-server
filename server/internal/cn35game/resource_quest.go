@@ -59,6 +59,10 @@ type mergedCatalog struct {
 	version int64
 	// itemContent 掉落 item_key → 客户端 content_id 解析表。
 	itemContent map[string]int
+	// events M8 活动/周常目录（nil=未装配 serve_event_catalog.json）。
+	events *eventCatalog
+	// eventDrops 周常素材掉落（不走资源本版本台账，ConfigVersion 恒 0）。
+	eventDrops map[int][]ResourceDrop
 }
 
 // loadMergedCatalog 读静态关卡目录并按生效资源配置合并。Resources/Items
@@ -69,31 +73,51 @@ func loadMergedCatalog(dep Deps) (*mergedCatalog, error) {
 		return nil, err
 	}
 	out := &mergedCatalog{questCatalog: cat}
+	// 活动目录故障不得拖垮剧情目录：降级为未装配（启动期已校验并告警）。
+	ec, err := loadEventCatalog(dep.AssetsDir)
+	if err != nil {
+		dep.log().Warn("CN3.5 活动目录不可用，活动/周常降级关闭", "err", err)
+		ec = nil
+	}
+	defer out.mergeEventCatalog(ec)
 	if dep.Resources == nil || dep.Items == nil {
+		if ec != nil && dep.Items != nil {
+			if err := out.loadItemContent(dep); err != nil {
+				return nil, err
+			}
+		}
 		return out, nil
 	}
 	cfg, err := dep.Resources.ActiveResourceConfig()
 	if err != nil {
 		return nil, fmt.Errorf("cn35 资源副本配置读取失败: %w", err)
 	}
+	if err := out.loadItemContent(dep); err != nil {
+		return nil, err
+	}
 	if cfg == nil {
 		return out, nil
-	}
-	defs, err := dep.Items.ItemCatalog()
-	if err != nil {
-		return nil, fmt.Errorf("cn35 物品目录读取失败: %w", err)
-	}
-	out.itemContent = map[string]int{}
-	for _, d := range defs {
-		if d.Enabled {
-			out.itemContent[d.ItemKey] = d.ContentID
-		}
 	}
 	if err := out.mergeResourceConfig(cfg, dep.Catalog); err != nil {
 		return nil, err
 	}
 	out.version = cfg.Version
 	return out, nil
+}
+
+// loadItemContent 物品 item_key → content_id 解析表（资源本/周常掉落共用）。
+func (m *mergedCatalog) loadItemContent(dep Deps) error {
+	defs, err := dep.Items.ItemCatalog()
+	if err != nil {
+		return fmt.Errorf("cn35 物品目录读取失败: %w", err)
+	}
+	m.itemContent = map[string]int{}
+	for _, d := range defs {
+		if d.Enabled {
+			m.itemContent[d.ItemKey] = d.ContentID
+		}
+	}
+	return nil
 }
 
 // mergeResourceConfig 把生效快照并入目录：stage/area/quest 行 +

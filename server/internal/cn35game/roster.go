@@ -493,8 +493,8 @@ func BuildGachaSnapshot(pools []GachaPoolDef, members map[string][]GachaDraftMem
 				problems = append(problems, fmt.Sprintf("池 %s 成员 %d 资源证据不齐（缺 %v）",
 					p.PoolID, m.UnitID, ru.MissingRequired))
 			}
-			if !MemorialUnitConfigured(m.UnitID) {
-				problems = append(problems, fmt.Sprintf("池 %s 成员 %d 缺 memorial 数值配置（unit_memorial 无行为条目）",
+			if !UnitBehaviorConfigured(m.UnitID) {
+				problems = append(problems, fmt.Sprintf("池 %s 成员 %d 无行为数值配置（unit_overrides/unit_memorial 均无）",
 					p.PoolID, m.UnitID))
 			}
 			if !ru.Enabled {
@@ -957,21 +957,21 @@ func GachaSeedPools() []GachaPoolDef {
 		{
 			PoolID: "1", Slot: 1, ListTypeID: 0, Code: "legacy_limited",
 			Name: "限时招募", Enabled: false, Limited: true,
-			Description: "本期推荐角色出现率提升。\\n本池为服务端重建规则，非原服数值。",
-			PriceCoin:   5, MaxExec: 10,
+			Description: "本期推荐角色出现率提升。\\\\n本池为服务端重建规则，非原服数值。",
+			PriceCoin:   5, MaxExec: 9, MaxBonus: 1,
 			PityGroup: gachaPityGroupLimitedUP,
 			Pity: gachaPityRules{
 				Enabled: true, URBasePercent: 2, URSoftStart: 50,
 				URSoftStepPercent: 2, URHardPity: 80, SRPity: 10,
 				UPGuarantee: true, NonURWeights: map[int]int{gachaRaritySR: 18, gachaRarityHR: 80},
 			},
-			Notes: "ROSTER350：槽1 限时位停用占位（enabled=0），不进入已发布版本。",
+			Notes: "ROSTER350：槽1 静态草稿占位（enabled=0）；运行期由每日轮换特殊招募动态挂载槽1。",
 		},
 		{
 			PoolID: "2", Slot: 2, ListTypeID: 1, Code: "diamond",
-			Name: "钻石招募", Enabled: true,
-			Description: "使用钻石招募同伴。\\n每连续 10 次至少获得 1 名 SR 以上。",
-			PriceCoin:   5, MaxExec: 10,
+			Name: ScoutDiscountPool2Name, Enabled: true,
+			Description: ScoutDiscountPool2Description,
+			PriceCoin:   5, MaxExec: 9, MaxBonus: 1,
 			PityGroup: gachaPityGroupDiamond,
 			Pity: gachaPityRules{
 				Enabled: true, URBasePercent: 2, URSoftStart: 50,
@@ -982,7 +982,7 @@ func GachaSeedPools() []GachaPoolDef {
 		{
 			PoolID: "3", Slot: 3, ListTypeID: 2, Code: "gold",
 			Name: "金币招募", Enabled: true,
-			Description: "使用金币招募同伴。\\n本池无保底，招募概率固定。",
+			Description: "使用金币招募同伴。\\\\n本池无保底，招募概率固定。",
 			PricePoint:  200, MaxExec: 10,
 			// 1-4★分布（服务端重建提案值，非原服数值）：四星按 1% 低率进入。
 			Distribution: map[int]int{gachaRarityN: 70, gachaRarityR: 24, gachaRarityHR: 5, gachaRaritySR: 1},
@@ -990,7 +990,7 @@ func GachaSeedPools() []GachaPoolDef {
 		{
 			PoolID: "4", Slot: 4, ListTypeID: 3, Code: "legacy_gold_adv",
 			Name: "高级金币招募", Enabled: false,
-			Description: "使用金币招募更高稀有度的同伴。\\n本池无保底，招募概率固定。",
+			Description: "使用金币招募更高稀有度的同伴。\\\\n本池无保底，招募概率固定。",
 			PricePoint:  2000, MaxExec: 10,
 			Distribution: map[int]int{gachaRarityR: 80, gachaRarityHR: 18, gachaRaritySR: 2},
 			Notes:        "ROSTER350：槽4 高级金币池停用占位（enabled=0），不进入已发布版本。",
@@ -998,19 +998,32 @@ func GachaSeedPools() []GachaPoolDef {
 	}
 }
 
+// GachaSeedPoolsForRare 稀有度 → 种子池归属规则（与 GachaSeedMembers
+// 内部口径一致）：3★–5★ 进钻石池 "2"；1★–4★ 进金币池 "3"（同一单位
+// 可同时进两池）。停用池(1/4)与不可达稀有度不分配。
+func GachaSeedPoolsForRare(rare int) []string {
+	var pools []string
+	if rare >= 3 && rare <= 5 {
+		pools = append(pools, "2")
+	}
+	if rare >= 1 && rare <= 4 {
+		pools = append(pools, "3")
+	}
+	return pools
+}
+
 // GachaSeedMembers 从名册清单推导种子成员（资源合格 + wiki 在册 +
-// obtain 文本来源复核 + 星级归属规则 + memorial 数值配置）。推导口径冻结：
+// obtain 文本来源复核 + 星级归属规则 + 行为数值配置）。推导口径冻结：
 //   - 钻石池(2)：rare∈{3,4,5} 且 obtain 含"钻石"（骑士契约书）。
 //   - 金币池(3)：rare∈{1,2,3,4} 且 obtain 含"金币"（勇者契约书2W等）。
 //   - 停用池(1/4)与不可达稀有度不分配成员。
-//   - unit_memorial 无行为数值配置的单位一律不入池（六族素材 + 数值
-//     配置双要件，发布校验同口径拒绝）。
+//   - 无行为数值配置（unit_overrides/unit_memorial 均无）的单位一律
+//     不入池（六族素材 + 数值配置双要件，发布校验同口径拒绝）。
 //
-// 遵循 open-all 全量开放口径（2026-10-05 数值配置门槛）：所有满足
-// Qualified（六族素材完整）&& Wiki（模板在册）&& MemorialUnitConfigured
-// （unit_memorial 数值在册）的角色按星级开放入池：
-//   - 池 "2"（钻石）：3★–5★（914 名）
-//   - 池 "3"（金币）：1★–4★（1,096 名）
+// 遵循 open-all 全量开放口径（2026-10-05 数值配置门槛，2026-11 起
+// unit_overrides 官方样本视同已配置）：所有满足 Qualified（六族素材
+// 完整）&& Wiki（模板在册）&& UnitBehaviorConfigured（行为数值在册）
+// 的角色按 GachaSeedPoolsForRare 的星级归属开放入池。
 //
 // 返回的成员需经 BuildGachaSnapshot 校验后才可发布。
 func GachaSeedMembers(m *RosterManifest) map[string][]GachaDraftMember {
@@ -1023,17 +1036,14 @@ func GachaSeedMembers(m *RosterManifest) map[string][]GachaDraftMember {
 		if err != nil || id <= 0 {
 			continue
 		}
-		// 数值配置要件（2026-10-05 口径）：unit_memorial 无对应行为数值
-		// 配置的单位不允许抽取——素材六族齐全只是准入的一半，缺数值
-		// 配置的角色战斗中会退回缺省行为。
-		if !MemorialUnitConfigured(id) {
+		// 数值配置要件（2026-10-05 口径）：unit_overrides/unit_memorial
+		// 均无对应行为数值配置的单位不允许抽取——素材六族齐全只是准入
+		// 的一半，缺数值配置的角色战斗中会退回缺省行为。
+		if !UnitBehaviorConfigured(id) {
 			continue
 		}
-		if u.Rare >= 3 && u.Rare <= 5 {
-			out["2"] = append(out["2"], GachaDraftMember{PoolID: "2", UnitID: id, Weight: 1})
-		}
-		if u.Rare >= 1 && u.Rare <= 4 {
-			out["3"] = append(out["3"], GachaDraftMember{PoolID: "3", UnitID: id, Weight: 1})
+		for _, pid := range GachaSeedPoolsForRare(u.Rare) {
+			out[pid] = append(out[pid], GachaDraftMember{PoolID: pid, UnitID: id, Weight: 1})
 		}
 	}
 	for _, list := range out {

@@ -1480,6 +1480,16 @@ func (s *Store) GWHelpPray(userID, action, opKey string, now time.Time) (int64, 
 		if action == "help" {
 			cost, gp = f.HelpBP, int64(f.HelpGP)
 		}
+		var perConRate float64
+		if fb := s.fateBonusMapTx(tx, userID, cn35game.FatePeriodKey(now)); len(fb) > 0 {
+			if action == "help" {
+				gp += int64(fb["guild_battle_help_gp"])
+			} else {
+				gp += int64(fb["guild_battle_pray_gp"])
+			}
+			perConRate = fb["guild_battle_per_con"]
+		}
+		contrib := cn35game.ApplyFateRateBonus(gp, perConRate)
 		// 应援/祈祷是**可重复点击**的动作（同一场次可多次买 GP），
 		// 因此无键时每次生成新动作键：客户端不发 op_key，服务端无法区分
 		// 「用户连点」与「网络重发」，这里沿用 2026-10-03 已声明边界
@@ -1520,7 +1530,7 @@ func (s *Store) GWHelpPray(userID, action, opKey string, now time.Time) (int64, 
 		if _, err = tx.Exec(`UPDATE cn35_guilds SET gp=gp+?,updated_at=? WHERE guild_id=?`, gp, nowUTC(), gid); err != nil {
 			return err
 		}
-		_, err = tx.Exec(`INSERT INTO cn35_gw_member_scores (session_id,user_id,guild_id,attack_count,win_count,gp_earned,updated_at) VALUES (?,?,?,0,0,?,?) ON CONFLICT(session_id,user_id) DO UPDATE SET gp_earned=gp_earned+excluded.gp_earned,updated_at=excluded.updated_at`, sessID, userID, gid, gp, nowUTC())
+		_, err = tx.Exec(`INSERT INTO cn35_gw_member_scores (session_id,user_id,guild_id,attack_count,win_count,gp_earned,updated_at) VALUES (?,?,?,0,0,?,?) ON CONFLICT(session_id,user_id) DO UPDATE SET gp_earned=gp_earned+excluded.gp_earned,updated_at=excluded.updated_at`, sessID, userID, gid, contrib, nowUTC())
 		return err
 	})
 	return gp, cost, err
@@ -1621,9 +1631,17 @@ func (s *Store) GWAttackOpen(userID, targetGuildID string, extraTargets []string
 			if err = tx.QueryRow(`SELECT initial_sp FROM cn35_gw_participants WHERE session_id=? AND guild_id=?`, sessID, gid).Scan(&sp); err != nil {
 				return err
 			}
-			effects := cn35game.GWEffects{Version: 1, InitialSP: 500 + sp, UnitHP: 1, UnitAT: 1, UnitToughness: 1}
+			effects := cn35game.GWEffects{
+				Version:       2,
+				InitialSP:     500 + sp,
+				UnitHP:        1,
+				UnitAT:        1,
+				UnitToughness: 1,
+				MainHPBonus:   400,
+				HelpLevelBase: 1,
+			}
 			// GC-04：效果等级一律由 point 反解（不读可能落后的 level 列）；
-			// sp 的初始 SP 加成 = 祭坛 value（25×level），与读面 effect 同源。
+			// sp 初始 SP = 25×Lv；taghness 主人公 HP = 400×Lv，Guts 基数 = clamp(Lv/20, 1, 5)。
 			eq, err := tx.Query(`SELECT type_id,point FROM cn35_guild_equipment WHERE guild_id=?`, gid)
 			if err != nil {
 				return err
@@ -1645,7 +1663,8 @@ func (s *Store) GWAttackOpen(userID, targetGuildID string, extraTargets []string
 				case "at":
 					effects.UnitAT += bonus
 				case "taghness":
-					effects.UnitToughness += bonus
+					effects.MainHPBonus = 400 * level
+					effects.HelpLevelBase = cn35game.GuildFacilityHelpLevelBase(level)
 				}
 			}
 			if err = eq.Close(); err != nil {
@@ -1797,6 +1816,11 @@ func (s *Store) GWAttackSettle(userID, battleID string, win bool, reportTime int
 			newStatus = "cleared"
 			gp = cn35game.GuildRules.AttackGPWin
 		}
+		var perConRate float64
+		if fb := s.fateBonusMapTx(tx, userID, cn35game.FatePeriodKey(s.clockNowUTC())); len(fb) > 0 {
+			gp += int64(fb["guild_battle_attak_gp"])
+			perConRate = fb["guild_battle_per_con"]
+		}
 		// 仅 bp_paid（走过 use_ap）可结算——prepared 直报不发奖。
 		up, err := tx.Exec(`UPDATE cn35_gw_attacks SET status=?,settled_at=?
 			WHERE battle_id=? AND status='bp_paid'`,
@@ -1832,13 +1856,14 @@ func (s *Store) GWAttackSettle(userID, battleID string, win bool, reportTime int
 			if win {
 				winCnt = 1
 			}
+			lateContrib := cn35game.ApplyFateRateBonus(gp, perConRate)
 			if _, err := tx.Exec(`INSERT INTO cn35_gw_member_scores
 				(session_id,user_id,guild_id,attack_count,win_count,gp_earned,updated_at)
 				VALUES (?,?,?,1,?,?,?)
 				ON CONFLICT(session_id,user_id) DO UPDATE SET
 				attack_count=attack_count+1,win_count=win_count+excluded.win_count,
 				gp_earned=gp_earned+excluded.gp_earned,updated_at=excluded.updated_at`,
-				a.SessionID, userID, a.GuildID, winCnt, gp, nowUTC()); err != nil {
+				a.SessionID, userID, a.GuildID, winCnt, lateContrib, nowUTC()); err != nil {
 				return err
 			}
 			if _, err := tx.Exec(`INSERT INTO cn35_gw_actions
@@ -1909,13 +1934,14 @@ func (s *Store) GWAttackSettle(userID, battleID string, win bool, reportTime int
 		if win {
 			winCnt = 1
 		}
+		contrib := cn35game.ApplyFateRateBonus(gp+res.Plundered, perConRate)
 		if _, err := tx.Exec(`INSERT INTO cn35_gw_member_scores
 			(session_id,user_id,guild_id,attack_count,win_count,gp_earned,updated_at)
 			VALUES (?,?,?,1,?,?,?)
 			ON CONFLICT(session_id,user_id) DO UPDATE SET
 			attack_count=attack_count+1,win_count=win_count+excluded.win_count,
 			gp_earned=gp_earned+excluded.gp_earned,updated_at=excluded.updated_at`,
-			a.SessionID, userID, a.GuildID, winCnt, gp+res.Plundered, nowUTC()); err != nil {
+			a.SessionID, userID, a.GuildID, winCnt, contrib, nowUTC()); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`INSERT INTO cn35_gw_actions

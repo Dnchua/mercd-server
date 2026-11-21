@@ -19,9 +19,12 @@
 package cn35game
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
+	"strings"
 
 	"github.com/Dnchua/mercd-server/server/internal/cn35wire"
 	"github.com/Dnchua/mercd-server/server/internal/httpapi"
@@ -142,6 +145,46 @@ func itemRowDoc(pi PlayerItem) map[string]any {
 		case "bp_potion":
 			doc["code"] = "bp_heal"
 			doc["description"] = "恢复全部BP"
+		case "power_stone":
+			doc["id"] = 200016
+			doc["item_id"] = 200016
+			doc["content_type_id"] = 2
+			doc["item_type"] = 0
+			doc["rare_type_id"] = 10
+			doc["order_num"] = 200016
+			doc["code"] = "power_stone"
+			doc["asset_id"] = nil
+			doc["asset_name"] = "common_icon/item_200016"
+			doc["icon_asset_name"] = "common_icon/item_200016"
+			doc["description"] = "可以使两位相同星级的同伴互换等级及觉醒数的神奇石头"
+			doc["hide_button"] = false
+		case "scout_book_3star", "scout_book_4star", "scout_book_5star":
+			orderNum := pi.Def.ContentID
+			if pi.ItemKey == "scout_book_3star" {
+				orderNum = 100010
+			}
+			doc["id"] = pi.Def.ContentID
+			doc["item_id"] = pi.Def.ContentID
+			doc["content_type_id"] = 2
+			doc["code"] = "scout_book"
+			doc["order_num"] = orderNum
+			doc["asset_id"] = nil
+			doc["asset_name"] = pi.Def.IconAssetName
+			doc["icon_asset_name"] = pi.Def.IconAssetName
+			doc["description"] = fmt.Sprintf("可以招募一位★%d同伴", pi.Def.Rare)
+			doc["hide_button"] = false
+		case "gacha_ticket_11", "gacha_ticket_12", "gacha_ticket_13":
+			tid, _ := strconv.Atoi(strings.TrimPrefix(pi.ItemKey, "gacha_ticket_"))
+			doc["id"] = tid
+			doc["item_id"] = tid
+			doc["content_type_id"] = 2
+			doc["code"] = "ticket"
+			doc["order_num"] = tid
+			doc["asset_id"] = nil
+			doc["asset_name"] = pi.Def.IconAssetName
+			doc["icon_asset_name"] = pi.Def.IconAssetName
+			doc["description"] = fmt.Sprintf("集齐5枚可招募一名★%d同伴", pi.Def.Rare)
+			doc["hide_button"] = false
 		default:
 			doc["hide_button"] = true
 		}
@@ -149,6 +192,33 @@ func itemRowDoc(pi PlayerItem) map[string]any {
 		// 素材等无使用途径的物品：隐藏按钮而非灰置。
 		doc["code"] = "powerup_item"
 		doc["hide_button"] = true
+		if pi.ItemKey == "evolve_item_1" {
+			doc["id"] = 1
+			doc["item_id"] = 1
+			doc["content_type_id"] = 107
+			doc["item_type"] = 3
+			doc["rare_type_id"] = 10
+			doc["order_num"] = 929
+			doc["code"] = "evolve_item"
+			doc["asset_id"] = nil
+			doc["asset_name"] = "common_icon/evolve_item_1"
+			doc["icon_asset_name"] = "common_icon/evolve_item_1"
+			doc["description"] = "用于提炼进化之卵的道具"
+		} else if strings.HasPrefix(pi.ItemKey, "evolve_fancy_item_") {
+			eggIDStr := strings.TrimPrefix(pi.ItemKey, "evolve_fancy_item_")
+			eggID, _ := strconv.Atoi(eggIDStr)
+			doc["id"] = eggID
+			doc["item_id"] = eggID
+			doc["content_type_id"] = 106
+			doc["item_type"] = 4
+			doc["rare_type_id"] = 10
+			doc["order_num"] = 930 + eggID
+			doc["code"] = "evolve_fancy_item"
+			doc["asset_id"] = nil
+			doc["asset_name"] = "common_icon/" + pi.ItemKey
+			doc["icon_asset_name"] = "common_icon/" + pi.ItemKey
+			doc["description"] = "用于魔宠融合的进化之卵"
+		}
 	}
 	return doc
 }
@@ -543,6 +613,9 @@ func useItemHandler(dep Deps) httpapi.Handler {
 			"cn35": true, "uid": req.UserID, "endpoint": "user_items_use",
 			"content_id": contentID, "count": count,
 		}
+		if idErr == nil && isScoutBookContentID(contentID) {
+			return useScoutBookItem(dep, c, req, contentID, count)
+		}
 		itemUse := dep.ItemUse
 		if itemUse == nil {
 			if iu, ok := dep.Accounts.(ItemUseStore); ok {
@@ -640,4 +713,172 @@ func unitComposeUpgradeItemHandler(dep Deps, decompose bool) httpapi.Handler {
 			},
 		})
 	})
+}
+
+var scoutBookItemSpecs = map[int]struct {
+	ItemKey  string
+	BookName string
+	Rare     int
+}{
+	100015: {ItemKey: "scout_book_3star", BookName: "3星契约书（★★★）", Rare: 3},
+	100011: {ItemKey: "scout_book_4star", BookName: "4星契约书（★★★★）", Rare: 4},
+	100012: {ItemKey: "scout_book_5star", BookName: "5星契约书（★★★★★）", Rare: 5},
+}
+
+func isScoutBookContentID(contentID int) bool {
+	_, ok := scoutBookItemSpecs[contentID]
+	return ok
+}
+
+func itemExchangeStoreFor(dep Deps) ItemExchangeStore {
+	if dep.ItemExchange != nil {
+		return dep.ItemExchange
+	}
+	if es, ok := dep.Items.(ItemExchangeStore); ok {
+		return es
+	}
+	if es, ok := dep.ItemUse.(ItemExchangeStore); ok {
+		return es
+	}
+	if es, ok := dep.Accounts.(ItemExchangeStore); ok {
+		return es
+	}
+	return nil
+}
+
+func useScoutBookItem(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest, contentID, count int) ([]byte, error) {
+	spec := scoutBookItemSpecs[contentID]
+	if count != 1 {
+		return cn35wire.MarshalJSON(trainingError(
+			"使用失败", "星级契约书每次仅可使用 1 本。"))
+	}
+	body, _, err := grantPoolUnitByItem(dep, c, req, spec.ItemKey, spec.BookName, 1, spec.Rare, true)
+	if err == nil {
+		c.Decoded["used"] = true
+		c.Decoded["used_item_key"] = spec.ItemKey
+	}
+	return body, err
+}
+
+// grantPoolUnitByItem 共享的契约书/星级信发卡结算原语：按目标星级从池 "2"
+// 合格成员中等概率抽 1 人，单事务扣减道具并结算单位（或满觉转徽章）。
+func grantPoolUnitByItem(
+	dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
+	itemKey, displayName string, costCount, rare int, withModal bool,
+) ([]byte, bool, error) {
+	exStore := itemExchangeStoreFor(dep)
+	if exStore == nil {
+		b, _ := cn35wire.MarshalJSON(trainingError("招募失败", "服务端未装配契约书兑换存储。"))
+		return b, false, nil
+	}
+	cfg, err := gachaActiveConfig(dep)
+	if err != nil {
+		return nil, false, err
+	}
+	if cfg == nil || len(cfg.MembersByPool["2"]) == 0 {
+		b, _ := cn35wire.MarshalJSON(trainingError("招募暂未开放", "卡池配置尚未发布，请稍后再试。"))
+		return b, false, nil
+	}
+	rarityID := rare * 10
+	cands := make([]int, 0, 128)
+	for _, gu := range cfg.MembersByPool["2"] {
+		if gu.RarityID != rarityID {
+			continue
+		}
+		if uid, perr := strconv.Atoi(gu.UnitID); perr == nil && uid > 0 {
+			cands = append(cands, uid)
+		}
+	}
+	if len(cands) == 0 {
+		b, _ := cn35wire.MarshalJSON(trainingError("招募失败", "暂无对应星级的可招募同伴。"))
+		return b, false, nil
+	}
+	nBig, rerr := rand.Int(rand.Reader, big.NewInt(int64(len(cands))))
+	if rerr != nil {
+		return nil, false, fmt.Errorf("cn35 道具发卡随机选取失败: %w", rerr)
+	}
+	unitID := cands[int(nBig.Int64())]
+
+	dupCap := cfg.Rules.DuplicateMaxCount
+	unitName := fmt.Sprintf("ID:%d", unitID)
+	if dep.Catalog != nil {
+		if u, uerr := dep.Catalog.Unit(unitID); uerr == nil && u != nil {
+			if mc := statmodel.MaxDuplicatedCount(u.Rare); mc < dupCap {
+				dupCap = mc
+			}
+			if u.Name != "" {
+				unitName = u.Name
+			}
+		}
+	}
+	compMedal := cfg.Rules.DuplicateCompensation[rarityID].Medal
+
+	grantRes, err := exStore.UseItemGrantUnit(req.UserID, itemKey, costCount, unitID, dupCap, compMedal)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrItemNotFound):
+			b, _ := cn35wire.MarshalJSON(trainingError("招募失败", "该招募道具不存在。"))
+			return b, false, nil
+		case errors.Is(err, ErrItemInsufficient):
+			b, _ := cn35wire.MarshalJSON(trainingError("数量不足", fmt.Sprintf("%s数量不足（需要 %d）。", displayName, costCount)))
+			return b, false, nil
+		case errors.Is(err, ErrInvalidRequest):
+			b, _ := cn35wire.MarshalJSON(trainingError("招募失败", "请求参数无效。"))
+			return b, false, nil
+		}
+		return nil, false, err
+	}
+
+	var entrySkills []PlayerSkill
+	if !grantRes.Newcomer {
+		skillsByUnit, skErr := skillsByUnitFor(dep, req.UserID)
+		if skErr != nil {
+			return nil, true, skErr
+		}
+		entrySkills = skillsByUnit[unitID]
+	}
+	entry, err := gachaResultEntryDoc(dep, grantRes.UnitID, grantRes.Level,
+		grantRes.DupBefore, grantRes.DupAfter, grantRes.Newcomer, entrySkills)
+	if err != nil {
+		return nil, true, err
+	}
+	data, err := inventoryDataFor(dep, c, req.UserID)
+	if err != nil {
+		return nil, true, err
+	}
+	snap, err := dep.Accounts.Snapshot(req.UserID)
+	if err != nil {
+		return nil, true, fmt.Errorf("cn35 道具发卡后快照失败: %w", err)
+	}
+	numericFieldsToNumber(snap.User, "leader_unit_id", "helper_unit_id")
+	data["user"] = snap.User
+	data["user_coin"] = snap.UserCoin
+	data["temp_gacha_result"] = []any{entry}
+	data["temp_gacha_reward"] = []any{}
+	data["albums"] = nil
+	data["gachas_extra_button"] = map[string]any{"breadshop_button_visible": true}
+	itemsData, err := userItemsData(dep, req.UserID)
+	if err != nil {
+		return nil, true, err
+	}
+	for k, v := range itemsData {
+		data[k] = v
+	}
+
+	resp := map[string]any{
+		"status": "success",
+		"data":   data,
+	}
+	if withModal {
+		bodyText := fmt.Sprintf("使用%s招募到了【%s】！", displayName, unitName)
+		if grantRes.CompensatedMedal > 0 {
+			bodyText += fmt.Sprintf("（已满觉醒，转化为 %d 枚徽章）", grantRes.CompensatedMedal)
+		}
+		resp["modal"] = map[string]any{
+			"title": "招募成功",
+			"body":  bodyText,
+		}
+	}
+	raw, merr := cn35wire.MarshalJSON(resp)
+	return raw, true, merr
 }

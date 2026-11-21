@@ -36,15 +36,16 @@ type UnitRecord struct {
 // 浮点漂移）。nil = 未证/降级——读面按显式 Size=1.000 处理并登记缺口，
 // 不写伪值、不发伪布尔。
 type MonsterRecord struct {
-	UUID       string // 实例 ID（非空，账号内唯一）
-	MonsterID  int    // 模板 ID（>0，cardcatalog.Monster 必须存在）
-	UnitID     *int   // 装备宿主 user_units.unit_id；nil=未装备
-	Level      int    // >=1
-	Protected  bool
-	Scale      *string // scale：展示用 Size（十进制字符串）
-	RealScale  *string // real_scale：推进式计算用 Size（客户端预览同口径）
-	ScaleLimit *string // scale_limit：强化上限（未证则 nil）
-	IsRare     *bool   // is_rare：客户端档位表选择（7 档/4 档；未证则 nil）
+	UUID          string // 实例 ID（非空，账号内唯一）
+	MonsterID     int    // 模板 ID（>0，cardcatalog.Monster 必须存在）
+	UnitID        *int   // 装备宿主 user_units.unit_id；nil=未装备
+	Level         int    // >=1
+	Protected     bool
+	Scale         *string // scale：展示用 Size（十进制字符串）
+	RealScale     *string // real_scale：推进式计算用 Size（客户端预览同口径）
+	ScaleLimit    *string // scale_limit：强化上限（未证则 nil）
+	IsRare        *bool   // is_rare：客户端档位表选择（7 档/4 档；未证则 nil）
+	FusionDegrees int     // fusion_degrees：融合培育度数（0..100，M5 T07）
 }
 
 // InventoryStore 库存读取面（07 消费：preset_data 注入 + 列表接口）。

@@ -1,0 +1,915 @@
+{
+  "module": "M8",
+  "version": "cn350-m8-candidate-v1",
+  "single_actor": true,
+  "implementation_ready": false,
+  "note": "M8 限时活动与周常探险离线候选计划；服务端协议/持久化与冒泡测试已通过（TestM8*），本轮未做实机校准与实机运行，implementation_ready 保持 false。",
+  "flows": {},
+  "cases": [
+    {
+      "id": "M801",
+      "name": "历史活动页签开放",
+      "criteria": [
+        "历史活动页签可点击，不再弹出功能即将开放",
+        "列表 42 行（窗口内 43 行）"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_01_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_01_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "request",
+          "path": "/stages/"
+        },
+        {
+          "op": "request",
+          "path": "/events/"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.arrow_right"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.past_event"
+        },
+        {
+          "op": "visible",
+          "target": "event.row.first"
+        },
+        {
+          "op": "absent",
+          "target": "modal.coming_soon"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_01_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_01_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M802",
+      "name": "历史活动行显示",
+      "criteria": [
+        "记录行贴图实际显示情况（预期背景空白）",
+        "倒计时为正数，无锁图标"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_02_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_02_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "request",
+          "path": "/stages/"
+        },
+        {
+          "op": "request",
+          "path": "/events/"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.arrow_right"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.past_event"
+        },
+        {
+          "op": "visible",
+          "target": "event.row.first"
+        },
+        {
+          "op": "absent",
+          "target": "event.row.lock"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_02_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_02_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M803",
+      "name": "历史活动空区域（D1）",
+      "criteria": [
+        "进入选择区域页且区域为空",
+        "不请求 /events/release，徽章不变"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_03_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_03_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "request",
+          "path": "/stages/"
+        },
+        {
+          "op": "request",
+          "path": "/events/"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.arrow_right"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.past_event"
+        },
+        {
+          "op": "click",
+          "target": "event.row.first"
+        },
+        {
+          "op": "request",
+          "path": "/areas/event"
+        },
+        {
+          "op": "visible",
+          "target": "area.page.header"
+        },
+        {
+          "op": "absent",
+          "target": "area.row.first"
+        },
+        {
+          "op": "click",
+          "target": "nav.back"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_03_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_03_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M804",
+      "name": "活动 44 窗口内进入",
+      "criteria": [
+        "新账号只看到魔菇大街和第一关 1440",
+        "四档 AP 与 doc17 一致"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_04_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_04_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "request",
+          "path": "/stages/"
+        },
+        {
+          "op": "request",
+          "path": "/events/"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.arrow_right"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.past_event"
+        },
+        {
+          "op": "click",
+          "target": "event.row.current"
+        },
+        {
+          "op": "request",
+          "path": "/areas/event"
+        },
+        {
+          "op": "visible",
+          "target": "area.row.first"
+        },
+        {
+          "op": "click",
+          "target": "area.quest.first"
+        },
+        {
+          "op": "request",
+          "path": "/quests/"
+        },
+        {
+          "op": "visible",
+          "target": "quest.difficulty.normal"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_04_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_04_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M805",
+      "name": "活动关战斗与推进",
+      "criteria": [
+        "扣 5 AP，结算后 1441 解锁",
+        "cn35_quest_clears(1440, normal)=1"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_05_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_05_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "request",
+          "path": "/stages/"
+        },
+        {
+          "op": "request",
+          "path": "/events/"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.arrow_right"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.past_event"
+        },
+        {
+          "op": "click",
+          "target": "event.row.current"
+        },
+        {
+          "op": "request",
+          "path": "/areas/event"
+        },
+        {
+          "op": "click",
+          "target": "area.quest.first"
+        },
+        {
+          "op": "click",
+          "target": "quest.difficulty.normal"
+        },
+        {
+          "op": "click",
+          "target": "quest.start"
+        },
+        {
+          "op": "request",
+          "path": "/quests/execute/1440.json"
+        },
+        {
+          "op": "request",
+          "path": "/quests/use_ap"
+        },
+        {
+          "op": "visible",
+          "target": "battle.result.clear"
+        },
+        {
+          "op": "request",
+          "path": "/quests/result"
+        },
+        {
+          "op": "click",
+          "target": "battle.result.next"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_05_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_05_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M806",
+      "name": "周常页",
+      "criteria": [
+        "四个按钮 AP 10/20/30/40 与 clear_count 正确",
+        "记录横幅与按钮贴图显示情况"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_06_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_06_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "request",
+          "path": "/stages/"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.arrow_right"
+        },
+        {
+          "op": "click",
+          "target": "daily.banner"
+        },
+        {
+          "op": "request",
+          "path": "/quests/daily"
+        },
+        {
+          "op": "visible",
+          "target": "daily.header"
+        },
+        {
+          "op": "visible",
+          "target": "daily.tier.impossible"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_06_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_06_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M807",
+      "name": "周六特级锚点战斗",
+      "criteria": [
+        "3 波共 38 只；金币约 9,985 + 加成",
+        "clear_count +1，主线指针不变"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_07_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_07_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "click",
+          "target": "daily.banner"
+        },
+        {
+          "op": "request",
+          "path": "/quests/daily"
+        },
+        {
+          "op": "click",
+          "target": "daily.tier.impossible"
+        },
+        {
+          "op": "click",
+          "target": "quest.start"
+        },
+        {
+          "op": "request",
+          "path": "/quests/execute/80064.json"
+        },
+        {
+          "op": "request",
+          "path": "/quests/use_ap"
+        },
+        {
+          "op": "visible",
+          "target": "battle.result.clear"
+        },
+        {
+          "op": "request",
+          "path": "/quests/result"
+        },
+        {
+          "op": "click",
+          "target": "battle.result.next"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_07_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_07_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M808",
+      "name": "素材日掉落",
+      "criteria": [
+        "掉落当天属性的花，数量在配置区间内",
+        "背包数量增加"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_08_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_08_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "click",
+          "target": "daily.banner"
+        },
+        {
+          "op": "request",
+          "path": "/quests/daily"
+        },
+        {
+          "op": "click",
+          "target": "daily.tier.very_hard"
+        },
+        {
+          "op": "click",
+          "target": "quest.start"
+        },
+        {
+          "op": "request",
+          "path": "/quests/execute/"
+        },
+        {
+          "op": "request",
+          "path": "/quests/use_ap"
+        },
+        {
+          "op": "visible",
+          "target": "battle.result.clear"
+        },
+        {
+          "op": "request",
+          "path": "/quests/result"
+        },
+        {
+          "op": "click",
+          "target": "battle.result.next"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_08_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_08_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M809",
+      "name": "区域完成率奖励",
+      "criteria": [
+        "魔菇大街累计 4 个难度后弹出完成率奖励",
+        "礼物盒有钻石×1 与夏尔梅；重放不重复发奖"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_09_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_09_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "request",
+          "path": "/stages/"
+        },
+        {
+          "op": "request",
+          "path": "/events/"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.arrow_right"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.past_event"
+        },
+        {
+          "op": "click",
+          "target": "event.row.current"
+        },
+        {
+          "op": "request",
+          "path": "/areas/event"
+        },
+        {
+          "op": "click",
+          "target": "area.quest.first"
+        },
+        {
+          "op": "click",
+          "target": "quest.difficulty.very_hard"
+        },
+        {
+          "op": "click",
+          "target": "quest.start"
+        },
+        {
+          "op": "request",
+          "path": "/quests/execute/1440.json"
+        },
+        {
+          "op": "request",
+          "path": "/quests/use_ap"
+        },
+        {
+          "op": "visible",
+          "target": "battle.result.clear"
+        },
+        {
+          "op": "request",
+          "path": "/quests/result"
+        },
+        {
+          "op": "click",
+          "target": "battle.result.next"
+        },
+        {
+          "op": "visible",
+          "target": "battle.reward_modal"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "nav.home"
+        },
+        {
+          "op": "click",
+          "target": "home.present_box"
+        },
+        {
+          "op": "request",
+          "path": "/user_presents/"
+        },
+        {
+          "op": "visible",
+          "target": "present.row.unit_1274"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_09_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_09_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M810",
+      "name": "Boss 关替代模板",
+      "criteria": [
+        "出现 Boss 血条且替代模板资源正常加载",
+        "可通关并结算"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_10_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_10_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "request",
+          "path": "/stages/"
+        },
+        {
+          "op": "request",
+          "path": "/events/"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.arrow_right"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.past_event"
+        },
+        {
+          "op": "click",
+          "target": "event.row.current"
+        },
+        {
+          "op": "request",
+          "path": "/areas/event"
+        },
+        {
+          "op": "click",
+          "target": "area.quest.boss"
+        },
+        {
+          "op": "click",
+          "target": "quest.difficulty.normal"
+        },
+        {
+          "op": "click",
+          "target": "quest.start"
+        },
+        {
+          "op": "request",
+          "path": "/quests/execute/1443.json"
+        },
+        {
+          "op": "visible",
+          "target": "battle.boss_gauge"
+        },
+        {
+          "op": "request",
+          "path": "/quests/use_ap"
+        },
+        {
+          "op": "visible",
+          "target": "battle.result.clear"
+        },
+        {
+          "op": "request",
+          "path": "/quests/result"
+        },
+        {
+          "op": "click",
+          "target": "battle.result.next"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_10_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_10_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M811",
+      "name": "时间窗关闭",
+      "criteria": [
+        "列表中没有活动 44，直接开战被拒绝",
+        "重开窗口后进度仍在"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_11_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_11_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "server",
+          "action": "restart_event_closed"
+        },
+        {
+          "op": "restart_app"
+        },
+        {
+          "op": "click",
+          "target": "login.start"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "request",
+          "path": "/stages/"
+        },
+        {
+          "op": "request",
+          "path": "/events/"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.arrow_right"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.past_event"
+        },
+        {
+          "op": "absent",
+          "target": "event.row.current"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_11_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_11_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "M812",
+      "name": "同库重启一致性",
+      "criteria": [
+        "推进边界、通关次数、奖励记录、礼物与周常次数重启前后完全一致"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "${m8_12_snapshot_sql}",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "m8_12_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "server",
+          "action": "restart_same_state"
+        },
+        {
+          "op": "restart_app"
+        },
+        {
+          "op": "click",
+          "target": "login.start"
+        },
+        {
+          "op": "click",
+          "target": "nav.quest"
+        },
+        {
+          "op": "request",
+          "path": "/stages/"
+        },
+        {
+          "op": "request",
+          "path": "/events/"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.arrow_right"
+        },
+        {
+          "op": "click",
+          "target": "stage.tab.past_event"
+        },
+        {
+          "op": "click",
+          "target": "event.row.current"
+        },
+        {
+          "op": "request",
+          "path": "/areas/event"
+        },
+        {
+          "op": "visible",
+          "target": "area.row.first"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "${m8_12_assert_sql}",
+          "params": [
+            "${A_uid}",
+            "${m8_12_before}"
+          ],
+          "compare": "eq",
+          "expected": 1
+        }
+      ]
+    }
+  ]
+}

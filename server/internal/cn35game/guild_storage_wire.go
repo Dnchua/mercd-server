@@ -53,9 +53,9 @@ var (
 //   - 第一个锚点之下（1..71）按拟合比率 1.1 向下外推——该段**没有任何观测**，
 //     属纯外推，标〔推断〕。
 const (
-	// GuildEquipMaxLevel 设施等级上限〔推断〕：观测最高 88 级（sp），
-	// 取整百 100 作为重建上限；≥89 的取值不影响任何已观测数据。
-	GuildEquipMaxLevel = 100
+	// GuildEquipMaxLevel 设施等级上限〔社区/Wiki〕：图 1 实测已见训练所 Lv.101，
+	// 梅露可物语 Wiki 口径各常驻设施上限 Lv.120（≥89 不影响已观测锚点）。
+	GuildEquipMaxLevel = 120
 	// guildEquipRoundUnit 阈值/容量按百位取整（原服 29,928,300 / 70,547,000
 	// 等锚点明显按有效位数取整，故重建曲线沿用百位取整）。
 	guildEquipRoundUnit = 100
@@ -163,23 +163,25 @@ func GuildEquipUntilPoint(level int) int64 {
 //
 // 锚点回代（全部精确命中，无拟合）：
 //
-//	sp         value = 25×L   → L88 = 2200       （原服 effect 初始SP值+2200）
-//	hp/at      value = 0.25×L → L79 = 19.75、L84 = 21
-//	taghness   value = 400×L  → L70 = 28000；value2 = Guts = min(5, L/20) → L70 = 3
-//	bp_storage value = capacity(L) = round100(620×L) → L79 = 49000
+//	sp         value = 25×L   → L88 = 2200、L100 = 2500 （初始SP值+2500）
+//	hp/at      value = 0.25×L → L79 = 19.75、L84 = 21、L100 = 25、L101 = 25.25
+//	taghness   value = 400×L  → L70 = 28000、L90 = 36000；Guts = clamp(L/20, 1..5) → L90 = 4
+//	bp_storage value = 9500 + 500×L（Lv.79 = 49000、Lv.96 = 57500）；
+//	           value2 = 0.498 + 0.002×L（Lv.79 = 0.656、Lv.96 = 0.690）
 const (
-	guildSPPerLevel        = 25.0
-	guildHpAtPercentPerLvl = 0.25
-	guildTaghnessHPPerLvl  = 400.0
-	guildTaghnessGutsEvery = 20
-	guildTaghnessGutsMax   = 5
-	guildBPStoragePerLevel = 620.0
+	guildSPPerLevel            = 25.0
+	guildHpAtPercentPerLvl     = 0.25
+	guildTaghnessHPPerLvl      = 400.0
+	guildTaghnessGutsEvery     = 20
+	guildTaghnessGutsMax       = 5
+	guildBPStorageBaseCapacity = 9500.0
+	guildBPStoragePerLevel     = 500.0
+	guildBPStorageRatioBase    = 0.498
+	guildBPStorageRatioPerLvl  = 0.002
 )
 
-// GuildBPStorageCapacity 蓄水库上限〔推断〕：round100(620×level)。
-// 唯一锚点 Lv.79 → 620×79 = 48,980 → 百位取整 49,000（原服 wire 与 modal 同值）。
-// 备选模型（620.25×level，Lv.79 → 49,000 亦成立）在百位精度下与主模型几乎
-// 不可区分；区分向量见 evidence §4「容量」。
+// GuildBPStorageCapacity 蓄水库上限〔原服双锚点线性〕：9500 + 500×level。
+// 双锚点精确命中：Lv.79 → 49,000（mlk 录包）、Lv.96 → 57,500（实机截图）。
 func GuildBPStorageCapacity(level int) int64 {
 	if level < 1 {
 		level = 1
@@ -187,14 +189,28 @@ func GuildBPStorageCapacity(level int) int64 {
 	if level > GuildEquipMaxLevel {
 		level = GuildEquipMaxLevel
 	}
-	return guildEquipRound100(guildBPStoragePerLevel * float64(level))
+	return guildEquipRound100(guildBPStorageBaseCapacity + guildBPStoragePerLevel*float64(level))
+}
+
+// GuildBPStorageInjectRatio 蓄水库次值比例〔原服双锚点线性〕：0.498 + 0.002×level（3 位小数）。
+// 双锚点精确命中：Lv.79 → 0.656（mlk 录包 65.60%）、Lv.96 → 0.690（实机截图 69.00%）。
+func GuildBPStorageInjectRatio(level int) float64 {
+	if level < 1 {
+		level = 1
+	}
+	if level > GuildEquipMaxLevel {
+		level = GuildEquipMaxLevel
+	}
+	return math.Round((guildBPStorageRatioBase+guildBPStorageRatioPerLvl*float64(level))*1000) / 1000
 }
 
 // GuildEquipValue 一类设施在当前等级的效果主值/次值。
-// bp_storage 的 value2（填充比例）依赖公会余额，由 store 侧填充，这里返回 0。
 func GuildEquipValue(typeID string, level int) (value, value2 float64, hasValue2 bool) {
 	if level < 1 {
 		level = 1
+	}
+	if level > GuildEquipMaxLevel {
+		level = GuildEquipMaxLevel
 	}
 	switch typeID {
 	case "sp":
@@ -208,7 +224,7 @@ func GuildEquipValue(typeID string, level int) (value, value2 float64, hasValue2
 		}
 		return guildTaghnessHPPerLvl * float64(level), float64(guts), true
 	case "bp_storage":
-		return float64(GuildBPStorageCapacity(level)), 0, true
+		return float64(GuildBPStorageCapacity(level)), GuildBPStorageInjectRatio(level), true
 	}
 	return 0, 0, false
 }

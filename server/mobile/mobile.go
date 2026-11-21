@@ -65,6 +65,11 @@ func Start(stateDir, assetsDir, cardsDir string, port int) error {
 		GuildSoloCandidates: 3,
 		GuildSoloOpponents:  3,
 		GuildSoloMaxGuilds:  24,
+		// 暴走魔宠默认值（与 BindCN35 默认口径一致）。
+		RaidBossMonsterID: 688,
+		RaidTriggerRate:   0.5,
+		RaidTTLSeconds:    5400,
+		RaidSoloAssist:    false,
 		// 移动端默认关取证落盘与周期扫描、不开管理面（无令牌即 503）。
 		RequestLog:       "",
 		EventLog:         "",

@@ -38,12 +38,24 @@ func TestItemCatalogSeeded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(defs) != 51 {
-		t.Fatalf("目录种子 = %d, want 51", len(defs))
+	if len(defs) != 79 {
+		t.Fatalf("目录种子 = %d, want 79", len(defs))
 	}
 	byKey := map[string]cn35game.ItemDef{}
 	for _, d := range defs {
 		byKey[d.ItemKey] = d
+	}
+	if d := byKey["scout_book_5star"]; d.ContentID != 100012 || d.Rare != 5 {
+		t.Fatalf("scout_book_5star 种子错误: %+v", d)
+	}
+	if d := byKey["gacha_ticket_13"]; d.ContentID != 100023 || d.Rare != 5 || d.BagCategory != "7" {
+		t.Fatalf("gacha_ticket_13 种子错误: %+v", d)
+	}
+	if d := byKey["evolve_item_1"]; d.ContentID != 107001 || d.Name != "神秘水晶" {
+		t.Fatalf("evolve_item_1 种子错误: %+v", d)
+	}
+	if d := byKey["power_stone"]; d.ContentID != 200016 || d.Name != "能力互换石" {
+		t.Fatalf("power_stone 种子错误: %+v", d)
 	}
 	if d := byKey["powerup_item_1"]; d.ContentID != 1 || d.Element != 1 || d.Form != 1 {
 		t.Fatalf("powerup_item_1 种子错误: %+v", d)

@@ -43,6 +43,7 @@ type storyIndexEntry struct {
 	OrderNum     int    `json:"order_num"`
 	Title        string `json:"title"`
 	SubTitle     string `json:"sub_title"`
+	AreaID       int    `json:"area_id"`
 	QuestID      int    `json:"quest_id"`
 	ReadTimingID int    `json:"read_timing_id"`
 	StoryTypeID  int    `json:"story_type_id"`
@@ -178,9 +179,13 @@ func loadStoryCatalog(assetsDir string, accepted map[string]bool) *storyCatalog 
 //     （客户端 SceneDocument 对 text 做 Substring(1,len-2)，短于 2 会越界）；
 //   - asset_names 全在生效清单；
 //   - 场景 left/center/right 对象带 id 时：actress_xys 含 actress_xy_<id>
-//     且 storyactress/storyactress<id> 在生效清单；
+//     且立绘包在生效清单并列入 asset_names（StoryViewer 只预载 asset_names，
+//     未预载的包在 UpdateActresses 里取 bundleObjects 抛异常、角色静默不显示）：
+//     type=scoutactress 读 unit/unit_large_ns_<id>，其余读 storyactress/storyactress<id>；
 //   - 场景 background 非空时：storybackground/storybackground<bg>_<tz>
-//     在生效清单。
+//     在生效清单；
+//   - 场景 bgm 非空时：bgm 值（sound/<名>）在生效清单并列入 asset_names
+//     （AudioManager.PlayBGM 只从已加载包取 AudioClip，未加载则静默不播）。
 func validateStoryDoc(fileID int, raw []byte, accepted map[string]bool) string {
 	var doc map[string]any
 	if err := json.Unmarshal(raw, &doc); err != nil {
@@ -199,6 +204,7 @@ func validateStoryDoc(fileID int, raw []byte, accepted map[string]bool) string {
 		return "scenes_map_array 缺失或为空"
 	}
 	names, _ := doc["asset_names"].([]any)
+	preload := make(map[string]bool, len(names))
 	for _, a := range names {
 		s, ok := a.(string)
 		if !ok {
@@ -207,6 +213,7 @@ func validateStoryDoc(fileID int, raw []byte, accepted map[string]bool) string {
 		if !accepted[s] {
 			return "asset_names 引用未下发资源: " + s
 		}
+		preload[s] = true
 	}
 	actressXYs, _ := doc["actress_xys"].(map[string]any)
 	for i, sv := range scenes {
@@ -223,6 +230,9 @@ func validateStoryDoc(fileID int, raw []byte, accepted map[string]bool) string {
 			if !ok {
 				continue
 			}
+			if storyStringField(ch["type"]) != "scoutactress" && storyStringField(ch["expression"]) == "" {
+				return fmt.Sprintf("scenes_map_array[%d].%s 立绘 expression 为空（客户端会绘制图集首个表情块），应为 tujo", i, pos)
+			}
 			aid, hasID := storyActorID(ch["id"])
 			if !hasID {
 				continue
@@ -232,8 +242,22 @@ func validateStoryDoc(fileID int, raw []byte, accepted map[string]bool) string {
 				return fmt.Sprintf("scenes_map_array[%d].%s id=%d 缺 %s", i, pos, aid, xyKey)
 			}
 			bundle := fmt.Sprintf("storyactress/storyactress%d", aid)
+			if storyStringField(ch["type"]) == "scoutactress" {
+				bundle = fmt.Sprintf("unit/unit_large_ns_%d", aid)
+			}
 			if !accepted[bundle] {
 				return fmt.Sprintf("scenes_map_array[%d].%s id=%d 缺资源 %s", i, pos, aid, bundle)
+			}
+			if !preload[bundle] {
+				return fmt.Sprintf("scenes_map_array[%d].%s id=%d 的 %s 未列入 asset_names", i, pos, aid, bundle)
+			}
+		}
+		if bgm := storyStringField(sc["bgm"]); bgm != "" {
+			if !accepted[bgm] {
+				return fmt.Sprintf("scenes_map_array[%d] 缺 BGM 资源 %s", i, bgm)
+			}
+			if !preload[bgm] {
+				return fmt.Sprintf("scenes_map_array[%d] BGM %s 未列入 asset_names", i, bgm)
 			}
 		}
 		bg, tz := storyStringField(sc["background"]), storyStringField(sc["timezone"])

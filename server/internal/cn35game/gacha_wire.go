@@ -154,9 +154,18 @@ func gachaReject(title, body string) ([]byte, bool, error) {
 func gachaExecuteSettle(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
 	st *gachaClientState, arrived time.Time,
 	poolID, countRaw, useScoutBook string) ([]byte, bool, error) {
-	if useScoutBook != "" && useScoutBook != "false" {
-		// 首期票券路径未建模（无票券库存与扣减事务），明确拒绝。
-		return gachaReject("招募暂未开放", "招募券功能尚未开放。")
+	if _, ok := ticketPoolSpecs[poolID]; ok {
+		return executeTicketGachaSettle(dep, c, req, poolID, countRaw, useScoutBook)
+	}
+
+	var useBook bool
+	switch useScoutBook {
+	case "", "false", "0":
+		useBook = false
+	case "true", "1":
+		useBook = true
+	default:
+		return gachaReject("招募参数非法", "招募券参数无效。")
 	}
 
 	count, err := strconv.Atoi(countRaw)
@@ -164,9 +173,15 @@ func gachaExecuteSettle(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
 		return gachaReject("招募参数非法", "招募次数无效，请重新打开招募页面。")
 	}
 
-	// 规则真源 = 已发布版本快照（ROSTER350-03）：同一次请求内池定义、
-	// 名单、权重、价格、保底全部锁定同一版本；未发布则执行面整体关闭。
-	cfg, err := gachaActiveConfig(dep)
+	evalTime := arrived
+	if dep.SpecialScoutClock != nil {
+		evalTime = dep.SpecialScoutClock()
+	} else if dep.GuildClock != nil {
+		evalTime = dep.GuildClock()
+	}
+
+	// 规则真源 = 已发布版本快照叠加当日特殊招募主题池（同一请求锁定同一配置）。
+	cfg, _, err := resolveRuntimeGachaConfig(dep, evalTime)
 	if err != nil {
 		return nil, true, err
 	}
@@ -176,29 +191,62 @@ func gachaExecuteSettle(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
 	rules := cfg.Rules
 	pool, ok := rules.poolByID(poolID)
 	if !ok {
-		// 旧槽位池（1 限时 / 4 高级金币）不在已发布版本内：明确拒绝，
+		// 旧槽位池（1 限时草稿 / 4 高级金币）不在已发布版本内：明确拒绝，
 		// 不可能进入扣费结算（ROSTER350-02/05 双池边界）。
 		return gachaReject("招募暂未开放", "该招募已结束或不存在。")
 	}
-	if err := gachaPoolOpen(pool, arrived.Unix()); err != nil {
+	if err := gachaPoolOpen(pool, evalTime.Unix()); err != nil {
 		return gachaReject("招募暂未开放", "该招募不在开放时间内。")
 	}
-	if count > pool.MaxExecutableCount {
-		return gachaReject("招募次数超出上限",
-			fmt.Sprintf("本次最多可招募 %d 次。", pool.MaxExecutableCount))
+
+	var currency string
+	var unitCost, totalCost, drawCount int
+	if useBook {
+		if pool.Price.Coin <= 0 {
+			return gachaReject("招募方式不支持", "该卡池不支持使用骑士契约书招募。")
+		}
+		if count > pool.MaxExecutableCount {
+			return gachaReject("招募次数超出上限",
+				fmt.Sprintf("本次最多可使用契约书招募 %d 次。", pool.MaxExecutableCount))
+		}
+		currency = gachaCurrencyScoutBook
+		unitCost = 1
+		totalCost = count
+		drawCount = count
+		if count == pool.MaxExecutableCount && pool.MaxExecuteBonus > 0 {
+			drawCount += pool.MaxExecuteBonus
+		}
+	} else {
+		maxAllowed := pool.MaxExecutableCount + pool.MaxExecuteBonus
+		if maxAllowed > gachaMaxCount {
+			maxAllowed = gachaMaxCount
+		}
+		if count > maxAllowed {
+			return gachaReject("招募次数超出上限",
+				fmt.Sprintf("本次最多可招募 %d 次。", maxAllowed))
+		}
+		drawCount = count
+		if pool.Price.Coin > 0 {
+			currency = gachaCurrencyCoin
+			unitCost = pool.Price.Coin
+			totalCost = count * pool.Price.Coin
+			if count == pool.MaxExecutableCount && pool.MaxExecuteBonus > 0 {
+				drawCount += pool.MaxExecuteBonus
+			}
+		} else {
+			currency = gachaCurrencyPoint
+			unitCost = pool.Price.Point
+			totalCost = count * pool.Price.Point
+		}
 	}
 
-	// 可中奖集合 = 已发布版本的成员名单（资源合格+启用，发布时已校验）；
-	// 不再从 catalog 推导，杜绝"解析成功即可抽"。
+	// 可中奖集合 = 已发布/运行期配置的成员名单（资源合格+启用，发布时已校验）。
 	units := cfg.MembersByPool[pool.PoolID]
 	if len(units) == 0 {
 		return gachaReject("招募暂未开放", "该招募的同伴名单尚未准备好。")
 	}
 
 	// 读取当前保底进度（无记录即零值，不按持卡量反推）。
-	// 版本口径：cn35_gacha_pity.rules_version 存的是保底参数指纹
-	//（PityRulesVersion）——发布只调成员/价格不改保底参数时进度延续；
-	// 保底参数变更才会触发"版本不一致→拒绝+人工处理"。
 	group := rules.pityGroupFor(pool)
 	state := gachaPityState{}
 	if group != gachaPityGroupNone {
@@ -223,15 +271,13 @@ func gachaExecuteSettle(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
 		return gachaReject("招募暂未开放", "该招募的同伴名单尚未准备好。")
 	}
 
-	// 结算前先做一次**只读**余额预检，给玩家明确提示（真正防超扣
-	// 由事务内的条件 UPDATE 保证，这里只是体验层短路）。
-	if res, ok := gachaBalanceCheck(dep, req.UserID, engine, count); !ok {
+	// 结算前先做一次只读余额预检，给玩家明确提示（真正防超扣由事务条件 UPDATE 保证）。
+	if res, ok := gachaBalanceCheck(dep, req.UserID, pool, currency, totalCost, useBook); !ok {
 		return res, true, nil
 	}
 
 	// 有界重放判定：同参指纹下最近一次 committed 是否应回放。
-	digest := gachaRequestDigest(req.UserID, pool.PoolID, count,
-		engine.primaryCurrency(), rules.Version)
+	digest := gachaRequestDigest(req.UserID, pool.PoolID, count, currency, rules.Version)
 	prev, err := dep.Gacha.GachaOperationByDigest(req.UserID, digest)
 	if err != nil {
 		return nil, true, fmt.Errorf("cn35 抽卡重放判定读取失败: %w", err)
@@ -241,13 +287,13 @@ func gachaExecuteSettle(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
 		return body, false, rerr
 	}
 
-	results, endState, err := engine.drawMany(state, count)
+	results, endState, err := engine.drawMany(state, drawCount)
 	if err != nil {
 		return gachaReject("招募失败", "招募过程中出现异常，请稍后再试。")
 	}
 
 	settlement, resultEntries, err := buildGachaSettlement(dep, req.UserID, pool, rules, group,
-		engine, results, endState, count)
+		results, endState, drawCount, digest, currency, unitCost, totalCost)
 	if err != nil {
 		return nil, true, err
 	}
@@ -255,10 +301,8 @@ func gachaExecuteSettle(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrGachaInsufficient):
-			return gachaReject("余额不足", gachaInsufficientMessage(pool))
+			return gachaReject("余额不足", gachaInsufficientMessage(pool, useBook))
 		case errors.Is(err, ErrGachaOperationConflict):
-			// 并发同键：另一事务已提交，回放缓存结果（防御兜底，
-			// 正常路径已由上方 digest 判定拦截）。
 			if dup, derr := dep.Gacha.GachaOperationByDigest(req.UserID, digest); derr == nil && dup != nil {
 				body, rerr := gachaReplayBody(dep, c, req, dup)
 				return body, false, rerr
@@ -281,12 +325,12 @@ func gachaExecuteSettle(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
 	data["user"] = snap.User
 	data["user_coin"] = snap.UserCoin
 	data["temp_gacha_result"] = resultEntries
-	// temp_gacha_reward 留空：首期无额外奖励，客户端 GachaResult.cs
-	// 在该键非空时弹结算 modal，空/缺键为正常路径。
 	data["temp_gacha_reward"] = []any{}
 	data["albums"] = nil
+	data["gachas_extra_button"] = map[string]any{"breadshop_button_visible": true}
 	c.Decoded["gacha_operation_id"] = rec.OperationID
-	c.Decoded["gacha_count"] = count
+	c.Decoded["gacha_count"] = drawCount
+	c.Decoded["use_scout_book"] = useBook
 	body, merr := cn35wire.MarshalJSON(map[string]any{
 		"status": "success",
 		"data":   data,
@@ -380,6 +424,7 @@ func gachaReplayBody(dep Deps, c *httpapi.Ctx, req *cn35wire.GameRequest,
 	}
 	data["temp_gacha_reward"] = []any{}
 	data["albums"] = nil
+	data["gachas_extra_button"] = map[string]any{"breadshop_button_visible": true}
 	c.Decoded["gacha_replay"] = true
 	c.Decoded["gacha_operation_id"] = prev.OperationID
 	return cn35wire.MarshalJSON(map[string]any{
@@ -411,7 +456,7 @@ func gachaPoolsHandler(dep Deps) httpapi.Handler {
 				"data":   map[string]any{"gachas": []any{}},
 			})
 		}
-		cfg, err := gachaActiveConfig(dep)
+		cfg, th, err := resolveRuntimeGachaConfig(dep, specialScoutNow(dep))
 		if err != nil {
 			return nil, err
 		}
@@ -419,6 +464,7 @@ func gachaPoolsHandler(dep Deps) httpapi.Handler {
 			"gachas":               []any{},
 			"gacha_warnings":       []any{},
 			"gacha_button_options": map[string]any{},
+			"gachas_extra_button":  map[string]any{"breadshop_button_visible": true},
 		}
 		if cfg == nil {
 			// 未发布任何版本：空池表（客户端无池可点，不会误扣费）。
@@ -429,6 +475,9 @@ func gachaPoolsHandler(dep Deps) httpapi.Handler {
 		pools := gachaPoolDocuments(cfg)
 		c.Decoded["gacha_pools"] = len(pools)
 		c.Decoded["gacha_config_version"] = cfg.Version
+		if th != nil {
+			c.Decoded["special_scout_pool"] = th.PoolID
+		}
 		data["gachas"] = pools
 		data["gacha_button_options"] = gachaButtonOptions(cfg)
 		// 可获得名单：名单页 UnitListParts 走 cache.Get(data_key) 读数，
@@ -483,7 +532,8 @@ func gachaReloadDataHandler(dep Deps) httpapi.Handler {
 		data["gachas"] = []any{}
 		data["gacha_warnings"] = []any{}
 		data["gacha_button_options"] = map[string]any{}
-		cfg, cerr := gachaActiveConfig(dep)
+		data["gachas_extra_button"] = map[string]any{"breadshop_button_visible": true}
+		cfg, _, cerr := resolveRuntimeGachaConfig(dep, specialScoutNow(dep))
 		if cerr != nil {
 			return nil, cerr
 		}
@@ -612,36 +662,41 @@ func gachaResultEntriesFallback(dep Deps, results []gachaDrawResult) []any {
 
 // gachaBalanceCheck 只读预检余额，不足时返回客户端可消费的错误响应。
 // 真正的防超扣在事务内（条件 UPDATE + RowsAffected），这里仅优化体验。
-func gachaBalanceCheck(dep Deps, userID string, engine *gachaEngine, count int) ([]byte, bool) {
+func gachaBalanceCheck(dep Deps, userID string, pool gachaPoolRules, currency string, need int, useBook bool) ([]byte, bool) {
 	snap, err := dep.Accounts.Snapshot(userID)
 	if err != nil {
 		return nil, true // 读取失败交由事务路径报错，不在此处误判为余额不足。
 	}
-	cost := engine.totalCost(count)
-	need := cost.Point
-	if cost.Coin > 0 {
-		need = cost.Coin
-	}
 	have := 0
-	if cost.Coin > 0 {
+	switch currency {
+	case gachaCurrencyScoutBook:
+		if v, ok := snap.User["scout_book_1"]; ok {
+			have = toInt(v)
+		}
+	case gachaCurrencyCoin:
 		if v, ok := snap.UserCoin["amount"]; ok {
 			have = toInt(v)
 		}
-	} else if v, ok := snap.User["gacha_point"]; ok {
-		have = toInt(v)
+	default:
+		if v, ok := snap.User["gacha_point"]; ok {
+			have = toInt(v)
+		}
 	}
 	if have >= need {
 		return nil, true
 	}
-	body, merr := cn35wire.MarshalJSON(gachaError("余额不足", gachaInsufficientMessage(engine.pool)))
+	body, merr := cn35wire.MarshalJSON(gachaError("余额不足", gachaInsufficientMessage(pool, useBook)))
 	if merr != nil {
 		return nil, true // 编码失败不吞掉真实结算路径的错误语义。
 	}
 	return body, false
 }
 
-// gachaInsufficientMessage 生成与池币种一致的不足提示。
-func gachaInsufficientMessage(pool gachaPoolRules) string {
+// gachaInsufficientMessage 生成与池币种/契约书一致的不足提示。
+func gachaInsufficientMessage(pool gachaPoolRules, useBook bool) string {
+	if useBook {
+		return "骑士契约书不足，无法进行本次招募（可前往面包店使用钻石兑换）。"
+	}
 	if pool.Price.Point > 0 {
 		return "金币不足，无法进行本次招募。"
 	}
@@ -693,7 +748,8 @@ func gachaNonce() string {
 // 同一操作内同卡多次按顺序结算，正确区分首次 newcomer 与后续 duplicated_delta。
 func buildGachaSettlement(
 	dep Deps, userID string, pool gachaPoolRules, rules gachaRules, group string,
-	engine *gachaEngine, results []gachaDrawResult, endState gachaPityState, count int,
+	results []gachaDrawResult, endState gachaPityState, drawCount int,
+	digest, currency string, unitCost, totalCost int,
 ) (*GachaSettlement, []any, error) {
 	// 当前库存快照：判定"是否已有该模板"以及累加后的觉醒上限。
 	owned := map[int]UnitRecord{}
@@ -790,15 +846,6 @@ func buildGachaSettlement(
 		_ = i
 	}
 
-	cost := engine.totalCost(count)
-	currency := engine.primaryCurrency()
-	unitCost := pool.Price.Point
-	totalCost := cost.Point
-	if currency == gachaCurrencyCoin {
-		unitCost = pool.Price.Coin
-		totalCost = cost.Coin
-	}
-
 	ledger := []GachaLedgerEntry{{
 		Seq: 0, Currency: currency, Delta: -totalCost,
 		Reason: "gacha_consume", BalanceAfter: 0,
@@ -817,7 +864,6 @@ func buildGachaSettlement(
 		return nil, nil, err
 	}
 
-	digest := gachaRequestDigest(userID, pool.PoolID, count, currency, rules.Version)
 	return &GachaSettlement{
 		UserID:        userID,
 		OperationKey:  gachaOperationKey(digest, gachaNonce()),
@@ -825,7 +871,7 @@ func buildGachaSettlement(
 		PoolID:        pool.PoolID,
 		PityGroup:     group,
 		RulesVersion:  rules.Version,
-		DrawCount:     count,
+		DrawCount:     drawCount,
 		Currency:      currency,
 		UnitCost:      unitCost,
 		TotalCost:     totalCost,
@@ -923,56 +969,64 @@ func unmarshalGachaSnapshot(resultJSON string) ([]gachaDrawResult, []any, error)
 // 客户端 GachaIndexParts.cs:352-363 按 list_type_id 建立槽位映射
 // （<4 → 槽号=list_type_id+1，否则落槽1），同槽重复会 Dictionary.Add
 // 抛异常。因此**必须**由规则同源生成，且保持 list_type_id 唯一。
+func gachaPoolDoc(p gachaPoolRules) (map[string]any, bool) {
+	pid, err := strconv.Atoi(p.PoolID)
+	if err != nil {
+		return nil, false
+	}
+	doc := map[string]any{
+		// id 必须下发数字：客户端单抽用 gacha.i("id")（int），连抽用
+		// gacha.s("id")（string，number 自动转 str）。下发 string 时
+		// 单抽读到 0（实机证据：execute?id=0&count=1）。
+		"id":                   pid,
+		"list_type_id":         p.ListTypeID,
+		"name":                 p.Name,
+		"description":          p.Description,
+		"point":                p.Price.Point,
+		"price":                p.Price.Coin,
+		"max_executable_count": p.MaxExecutableCount,
+		"max_execute_bonus":    p.MaxExecuteBonus,
+		// ClickUnitList（GachaIndexParts.cs:332-334）：
+		// ShowPage(PageMessage("name=GachaAvailableList&method=Stack"),
+		//   gacha.doc("available_list_option"))——本 doc 整体作为
+		// additionalOption 深并入 GachaAvailableList 页 option
+		// （PageBase.cs:279-281 option.Merge）。因此 parts 段会变为
+		// 页面真实部件：UnitList 经 data_key 读 cache 渲染名单。
+		// 几何参数与 UserUnits 页 UnitList 实测配置一致（app_conf
+		// serve_app_conf_android.json 页 UnitList，实机已证）。
+		"available_list_option": map[string]any{
+			"name":   "GachaAvailableList",
+			"method": "Stack",
+			"parts": map[string]any{
+				"UnitList": map[string]any{
+					"prefab":            "Common/PageParts/UnitListParts",
+					"x":                 1,
+					"y":                 33,
+					"data_key":          gachaAvailableUnitsKey(p.PoolID),
+					"row_prefab_name":   "Common/Piece/UserUnitListRow",
+					"arrangement":       "horizon",
+					"cell_width":        74,
+					"clip_range_x":      0,
+					"clip_range_y":      0,
+					"clip_range_size_x": 460,
+					"clip_range_size_y": 190,
+				},
+			},
+		},
+	}
+	if p.Limited && p.BeginAt > 0 && p.EndAt > 0 {
+		doc["began_at"] = p.BeginAt
+		doc["ended_at"] = p.EndAt
+	}
+	return doc, true
+}
+
 func gachaPoolDocuments(cfg *ActiveGachaConfig) []any {
 	out := make([]any, 0, len(cfg.Rules.Pools))
 	for _, p := range cfg.Rules.Pools {
-		pid, err := strconv.Atoi(p.PoolID)
-		if err != nil {
+		doc, ok := gachaPoolDoc(p)
+		if !ok {
 			return nil
-		}
-		doc := map[string]any{
-			// id 必须下发数字：客户端单抽用 gacha.i("id")（int），连抽用
-			// gacha.s("id")（string，number 自动转 str）。下发 string 时
-			// 单抽读到 0（实机证据：execute?id=0&count=1）。
-			"id":                   pid,
-			"list_type_id":         p.ListTypeID,
-			"name":                 p.Name,
-			"description":          p.Description,
-			"point":                p.Price.Point,
-			"price":                p.Price.Coin,
-			"max_executable_count": p.MaxExecutableCount,
-			"max_execute_bonus":    p.MaxExecuteBonus,
-			// ClickUnitList（GachaIndexParts.cs:332-334）：
-			// ShowPage(PageMessage("name=GachaAvailableList&method=Stack"),
-			//   gacha.doc("available_list_option"))——本 doc 整体作为
-			// additionalOption 深并入 GachaAvailableList 页 option
-			// （PageBase.cs:279-281 option.Merge）。因此 parts 段会变为
-			// 页面真实部件：UnitList 经 data_key 读 cache 渲染名单。
-			// 几何参数与 UserUnits 页 UnitList 实测配置一致（app_conf
-			// serve_app_conf_android.json 页 UnitList，实机已证）。
-			"available_list_option": map[string]any{
-				"name":   "GachaAvailableList",
-				"method": "Stack",
-				"parts": map[string]any{
-					"UnitList": map[string]any{
-						"prefab":            "Common/PageParts/UnitListParts",
-						"x":                 1,
-						"y":                 33,
-						"data_key":          gachaAvailableUnitsKey(p.PoolID),
-						"row_prefab_name":   "Common/Piece/UserUnitListRow",
-						"arrangement":       "horizon",
-						"cell_width":        74,
-						"clip_range_x":      0,
-						"clip_range_y":      0,
-						"clip_range_size_x": 460,
-						"clip_range_size_y": 190,
-					},
-				},
-			},
-		}
-		if p.Limited && p.BeginAt > 0 && p.EndAt > 0 {
-			doc["began_at"] = p.BeginAt
-			doc["ended_at"] = p.EndAt
 		}
 		out = append(out, doc)
 	}
@@ -988,6 +1042,7 @@ func GachaPoolDocumentsForTest(cfg *ActiveGachaConfig) []map[string]any {
 			"id":                   p.PoolID,
 			"list_type_id":         p.ListTypeID,
 			"name":                 p.Name,
+			"description":          p.Description,
 			"point":                p.Price.Point,
 			"price":                p.Price.Coin,
 			"max_executable_count": p.MaxExecutableCount,
@@ -1108,8 +1163,16 @@ func gachaRuleDisclosure(p gachaPoolRules, rules gachaRules) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "【%s】", p.Name)
 	if p.Price.Coin > 0 {
-		fmt.Fprintf(&b, "\n价格：单抽 %d 钻石，%d 连 %d 钻石。",
-			p.Price.Coin, p.MaxExecutableCount, p.Price.Coin*p.MaxExecutableCount)
+		if p.MaxExecuteBonus > 0 {
+			total := p.MaxExecutableCount + p.MaxExecuteBonus
+			fmt.Fprintf(&b, "\n价格：单抽 %d 钻石 / 1本契约书；%d连（赠送%d次共%d次，%s） %d 钻石 / %d 本契约书。",
+				p.Price.Coin, p.MaxExecutableCount, p.MaxExecuteBonus, total,
+				gachaDiscountLabel(p.MaxExecutableCount, total),
+				p.Price.Coin*p.MaxExecutableCount, p.MaxExecutableCount)
+		} else {
+			fmt.Fprintf(&b, "\n价格：单抽 %d 钻石，%d 连 %d 钻石。",
+				p.Price.Coin, p.MaxExecutableCount, p.Price.Coin*p.MaxExecutableCount)
+		}
 	} else {
 		fmt.Fprintf(&b, "\n价格：单抽 %d 金币，%d 连 %d 金币。",
 			p.Price.Point, p.MaxExecutableCount, p.Price.Point*p.MaxExecutableCount)
@@ -1197,4 +1260,16 @@ func gachaError(title, body string) map[string]any {
 			"body":  body,
 		},
 	}
+}
+
+// gachaDiscountLabel 按"付费次数/实抽次数"生成折扣文案（9/10 → 享9折），
+// 非整折时退化为"付N抽M"，避免把非 9+1 的配置写成 9 折。
+func gachaDiscountLabel(paid, total int) string {
+	if total <= 0 || paid >= total {
+		return "无折扣"
+	}
+	if (paid*10)%total == 0 {
+		return fmt.Sprintf("享%d折", paid*10/total)
+	}
+	return fmt.Sprintf("付%d抽%d", paid, total)
 }

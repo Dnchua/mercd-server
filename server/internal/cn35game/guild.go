@@ -142,7 +142,7 @@ var GuildRules = struct {
 	GroupSize:                 4,
 	Colors:                    []string{"ff4848", "4863ff", "48a24f", "a848b0"},
 	InvestCostPerPoint:        1,
-	EquipMaxLevel:             10,
+	EquipMaxLevel:             GuildEquipMaxLevel,
 	EquipPointPerLevel:        100,
 	AttackGPWin:               100,
 	AttackGPLose:              20,
@@ -463,10 +463,13 @@ type GWAttack struct {
 }
 
 // GWEffects 开战冻结的己方设施及 SP。零值兼容 0028 旧攻击。
+// Version=1 保留既有单测夹具（无 MainHPBonus/HelpLevelBase）；Version>=2 由食堂等设施冻结。
 type GWEffects struct {
 	Version                       int `json:"version"`
 	InitialSP                     int `json:"initial_sp"`
 	UnitHP, UnitAT, UnitToughness float64
+	MainHPBonus                   int `json:"main_hp_bonus,omitempty"`
+	HelpLevelBase                 int `json:"help_level_base,omitempty"`
 }
 
 // GWDefenseMonster 防卫快照单条。

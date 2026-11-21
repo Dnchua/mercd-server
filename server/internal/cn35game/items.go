@@ -272,3 +272,21 @@ type ItemUseStore interface {
 	// ErrItemNotUsable；库存不足 → ErrItemInsufficient。
 	UseItem(userID string, contentID, count int) (*UseItemResult, error)
 }
+
+// ItemUnitGrantResult 契约书/星级信等消耗道具发卡的单事务结算回执。
+type ItemUnitGrantResult struct {
+	UnitID           int  `json:"unit_id"`
+	Level            int  `json:"level"`
+	DupBefore        int  `json:"dup_before"`
+	DupAfter         int  `json:"dup_after"`
+	CompensatedMedal int  `json:"compensated_medal"`
+	Newcomer         bool `json:"newcomer"`
+}
+
+// ItemExchangeStore 契约书 6 合 1 兑换与契约书/信券单事务发卡契约。
+type ItemExchangeStore interface {
+	// ExchangePlayerItem 单事务：扣 costCount 个 fromKey，发放 1 个 toKey。
+	ExchangePlayerItem(userID, fromKey, toKey string, costCount int) error
+	// UseItemGrantUnit 单事务：扣 costCount 个 itemKey，入库 1 名同伴（或满觉转徽章）。
+	UseItemGrantUnit(userID, itemKey string, costCount, unitID, dupCap, compMedal int) (*ItemUnitGrantResult, error)
+}

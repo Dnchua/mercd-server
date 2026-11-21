@@ -181,6 +181,22 @@ func MonsterSeedSkill(m *cardcatalog.Monster) (id int, value, value2 float64) {
 		return 0, 0, 0
 	}
 	value, value2 = seedSkillValueFromText(id, s)
+	if m.SklMax != nil && *m.SklMax > 0 {
+		switch {
+		case id == seedSkillHeal:
+			if value2 == 0 {
+				value2 = *m.SklMax / 100.0
+			}
+		case id == seedSkillGutsUp, id == seedSkillParalysis, id == seedSkillParalyze2, id == seedSkillExtend:
+			if value == 0 {
+				value = *m.SklMax
+			}
+		default:
+			if value == 0 {
+				value = *m.SklMax / 100.0
+			}
+		}
+	}
 	def := SeedSkillValueDefault[id]
 	if value == 0 {
 		value = def[0]

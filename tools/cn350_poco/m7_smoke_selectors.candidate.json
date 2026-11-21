@@ -1,0 +1,161 @@
+{
+  "nav.story_entry": {
+    "selector": {
+      "attrs": {
+        "text": "故事"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "story.chapter.first": {
+    "selector": {
+      "attrs": {
+        "text": "第1章"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "story.chapter.last": {
+    "selector": {
+      "attrs": {
+        "text": "第11章"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "story.episode.first": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^Story_\\d+$"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "story.reader.panel": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^(StoryPage|StoryWindow|MessageWindow)$"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "spring.modal.medal": {
+    "selector": {
+      "attrs": {
+        "textMatches": ".*徽章.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "breadshop.open": {
+    "selector": {
+      "attrs": {
+        "textMatches": ".*面包店.*|.*每日商店.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "breadshop.tab.fixed": {
+    "selector": {
+      "attrs": {
+        "textMatches": ".*契约书.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "breadshop.scout_book.buy": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^RedDiamondShopListRow_10000$"
+      },
+      "offspring": [
+        {
+          "name": "Button"
+        }
+      ]
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "nav.gacha": {
+    "selector": {
+      "attrs": {
+        "text": "招募"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gacha.scout_book.toggle": {
+    "selector": {
+      "attrs": {
+        "textMatches": ".*契约书.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gacha.slot2.ten_pull": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GachaButton10$"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gacha.slot1.banner": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GachaTab0$"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gacha.slot1.ten_pull": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GachaButton10$"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "gacha.result.list": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^GachaResult$"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "item.scout_book_3star.exchange": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^UserItemListRow_100015$"
+      },
+      "offspring": [
+        {
+          "textMatches": ".*交换.*|.*合成.*"
+        }
+      ]
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "item.tab.tickets": {
+    "selector": {
+      "attrs": {
+        "textMatches": ".*礼券.*|.*礼物匣.*"
+      }
+    },
+    "status": "candidate-not-device-verified"
+  },
+  "item.ticket_11.use": {
+    "selector": {
+      "attrs": {
+        "nameMatches": "^UserItemListRow_11$"
+      },
+      "offspring": [
+        {
+          "name": "UseButton"
+        }
+      ]
+    },
+    "status": "candidate-not-device-verified"
+  }
+}

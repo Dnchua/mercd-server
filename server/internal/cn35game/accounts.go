@@ -447,6 +447,11 @@ func ApplyDefaultUserWireFields(user map[string]any, balances map[string]int64) 
 	// 1. 货币/代币类（11 项）
 	setDefault("p_medal", bal("p_medal"))
 	setDefault("friend_medal", bal("friend_medal"))
+	if balances != nil {
+		if cpVal, ok := balances["cp"]; ok {
+			setDefault("cp", cpVal)
+		}
+	}
 	setDefault("cp", int64(120))
 	setDefault("max_cp", int64(120))
 	setDefault("lc", int64(3))
@@ -462,7 +467,12 @@ func ApplyDefaultUserWireFields(user map[string]any, balances map[string]int64) 
 	setDefault("consume_ring", map[string]any{"1": int64(0)})
 	setDefault("elements", map[string]any{"1": int64(0), "2": int64(0), "3": int64(0), "4": int64(0), "5": int64(0)})
 	setDefault("potions", map[string]any{"1": int64(0), "2": int64(0), "3": int64(0)})
-	setDefault("scout_books", map[string]any{"1": int64(0), "99": int64(0), "100": int64(0), "101": int64(0)})
+	setDefault("scout_books", map[string]any{
+		"1":   bal("scout_book_1"),
+		"99":  bal("scout_book_99"),
+		"100": bal("scout_book_100"),
+		"101": bal("scout_book_101"),
+	})
 	setDefault("evolve_items", map[string]any{"1": int64(0)})
 	setDefault("evolve_fancy_items", map[string]any{"102": int64(0), "203": int64(0), "301": int64(0), "502": int64(0), "503": int64(0)})
 	setDefault("upgrade_items", map[string]any{"1": int64(0), "2": int64(0), "3": int64(0)})
@@ -548,12 +558,12 @@ func ApplyDefaultUserWireFields(user map[string]any, balances map[string]int64) 
 	setDefault("real_name_at", "2017/10/26 20:06:51")
 	setDefault("real_name_binded_phone", "")
 	setDefault("real_name_poped", int64(1))
-	setDefault("scout_book_1", int64(0))
+	setDefault("scout_book_1", bal("scout_book_1"))
 	setDefault("scout_book_2", int64(0))
 	setDefault("scout_book_3", int64(0))
-	setDefault("scout_book_99", int64(0))
-	setDefault("scout_book_100", int64(0))
-	setDefault("scout_book_101", int64(0))
+	setDefault("scout_book_99", bal("scout_book_99"))
+	setDefault("scout_book_100", bal("scout_book_100"))
+	setDefault("scout_book_101", bal("scout_book_101"))
 	setDefault("token_money_1", int64(0))
 	setDefault("token_money_2", int64(0))
 	setDefault("token_money_3", int64(0))

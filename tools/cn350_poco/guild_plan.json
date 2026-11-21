@@ -1,0 +1,2961 @@
+{
+  "schemaVersion": 1,
+  "note": "状态化专用存档验收；UI候选必须逐页校准。协议幂等/并发/回滚另由server_gate验证，不冒充UI。",
+  "flows": {
+    "guild": [
+      {
+        "op": "click",
+        "target": "nav.guild"
+      },
+      {
+        "op": "visible",
+        "target": "guild.members"
+      }
+    ],
+    "confirm": [
+      {
+        "op": "click",
+        "target": "modal.yes"
+      },
+      {
+        "op": "visible",
+        "target": "modal.ok"
+      },
+      {
+        "op": "click",
+        "target": "modal.ok"
+      }
+    ],
+    "search": [
+      {
+        "op": "click",
+        "target": "nav.guild"
+      },
+      {
+        "op": "click",
+        "target": "guild.search"
+      },
+      {
+        "op": "set_text",
+        "target": "guild.search.input",
+        "value": "${guild_name}"
+      },
+      {
+        "op": "click",
+        "target": "guild.search.submit"
+      },
+      {
+        "op": "visible",
+        "target": "guild.result"
+      }
+    ],
+    "apply": [
+      {
+        "op": "click",
+        "target": "guild.apply"
+      },
+      {
+        "op": "click",
+        "target": "modal.yes"
+      },
+      {
+        "op": "click",
+        "target": "modal.ok"
+      }
+    ],
+    "applicants": [
+      {
+        "op": "click",
+        "target": "nav.guild"
+      },
+      {
+        "op": "click",
+        "target": "guild.applicants"
+      },
+      {
+        "op": "visible",
+        "target": "guild.member.b"
+      }
+    ],
+    "member_b": [
+      {
+        "op": "click",
+        "target": "nav.guild"
+      },
+      {
+        "op": "click",
+        "target": "guild.members"
+      },
+      {
+        "op": "click",
+        "target": "guild.member.b"
+      }
+    ],
+    "member_a": [
+      {
+        "op": "click",
+        "target": "nav.guild"
+      },
+      {
+        "op": "click",
+        "target": "guild.members"
+      },
+      {
+        "op": "click",
+        "target": "guild.member.a"
+      }
+    ],
+    "invite_b": [
+      {
+        "op": "click",
+        "target": "nav.guild"
+      },
+      {
+        "op": "click",
+        "target": "guild.invite.search"
+      },
+      {
+        "op": "click",
+        "target": "guild.member.b"
+      },
+      {
+        "op": "click",
+        "target": "waiting.invite"
+      },
+      {
+        "op": "click",
+        "target": "modal.yes"
+      },
+      {
+        "op": "click",
+        "target": "modal.ok"
+      }
+    ],
+    "battle": [
+      {
+        "op": "click",
+        "target": "nav.guild"
+      },
+      {
+        "op": "click",
+        "target": "gw.enemy"
+      },
+      {
+        "op": "click",
+        "target": "gw.execute"
+      },
+      {
+        "op": "click",
+        "target": "modal.yes"
+      },
+      {
+        "op": "visible",
+        "target": "gw.start"
+      },
+      {
+        "op": "click",
+        "target": "gw.start"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "G01",
+      "title": "双端冷启动与未入会读面",
+      "criteria": [
+        "GC-10"
+      ],
+      "depends_on": [],
+      "steps": [
+        {
+          "op": "restart_app",
+          "role": "A"
+        },
+        {
+          "op": "click",
+          "target": "login.start",
+          "role": "A"
+        },
+        {
+          "op": "click",
+          "target": "nav.guild",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "guild.unjoined",
+          "role": "A"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE user_id IN (?,?)",
+          "params": [
+            "${A_uid}",
+            "${B_uid}"
+          ],
+          "expected": 0
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 500,
+          "compare": "ge"
+        }
+      ]
+    },
+    {
+      "id": "G02",
+      "title": "创建审批制公会",
+      "criteria": [
+        "GC-07"
+      ],
+      "depends_on": [
+        "G01"
+      ],
+      "steps": [
+        {
+          "op": "click",
+          "target": "guild.create"
+        },
+        {
+          "op": "set_text",
+          "target": "guild.name.input",
+          "value": "${guild_name}"
+        },
+        {
+          "op": "click",
+          "target": "guild.approval.manual"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "guild.create.submit"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/create.json",
+          "role": "A"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT guild_id FROM cn35_guild_members WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "gid"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT role FROM cn35_guild_members WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 3
+        },
+        {
+          "op": "visible",
+          "target": "guild.members"
+        }
+      ]
+    },
+    {
+      "id": "G03",
+      "title": "公会设置与曜日参战保存",
+      "criteria": [
+        "GC-07"
+      ],
+      "depends_on": [
+        "G02"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "click",
+          "target": "guild.settings"
+        },
+        {
+          "op": "set_text",
+          "target": "guild.memo.input",
+          "value": "${memo}"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "guild.settings.save"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/update",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT memo FROM cn35_guilds WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": "${memo}"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "visible",
+          "target": "guild.members"
+        },
+        {
+          "op": "click",
+          "target": "guild.settings"
+        },
+        {
+          "op": "click",
+          "target": "guild.shift.monday"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "guild.shifts.save"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/set_shifts",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT shifts & 1 FROM cn35_guilds WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 0
+        },
+        {
+          "op": "click",
+          "target": "guild.shift.monday"
+        },
+        {
+          "op": "click",
+          "target": "guild.shifts.save"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/set_shifts",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT shifts & 1 FROM cn35_guilds WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "G04",
+      "title": "搜索详情与入会申请非空",
+      "criteria": [
+        "GC-07"
+      ],
+      "depends_on": [
+        "G03"
+      ],
+      "steps": [
+        {
+          "flow": "search",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/search.json",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "guild.result",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/show",
+          "role": "B"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "flow": "apply",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/join",
+          "role": "B"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_subscriptions WHERE guild_id=? AND user_id=? AND status='pending'",
+          "params": [
+            "${gid}",
+            "${B_uid}"
+          ],
+          "expected": 1
+        },
+        {
+          "flow": "applicants"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/subscriptions",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "guild.member.b"
+        }
+      ]
+    },
+    {
+      "id": "G05",
+      "title": "拒绝申请不产生会籍",
+      "criteria": [
+        "GC-07"
+      ],
+      "depends_on": [
+        "G04"
+      ],
+      "steps": [
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "guild.reject"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/reject_subscription",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE guild_id=? AND user_id=?",
+          "params": [
+            "${gid}",
+            "${B_uid}"
+          ],
+          "expected": 0
+        },
+        {
+          "flow": "search",
+          "role": "B"
+        },
+        {
+          "op": "visible",
+          "target": "guild.result",
+          "role": "B"
+        }
+      ]
+    },
+    {
+      "id": "O01",
+      "title": "拒绝全部申请与免审入会/退出恢复",
+      "criteria": [
+        "GC-07"
+      ],
+      "steps": [
+        {
+          "flow": "search",
+          "role": "B"
+        },
+        {
+          "flow": "apply",
+          "role": "B"
+        },
+        {
+          "flow": "applicants"
+        },
+        {
+          "op": "click",
+          "target": "guild.reject_all"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/reject_all_subscription",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_subscriptions WHERE guild_id=? AND status='pending'",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 0
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "click",
+          "target": "guild.settings"
+        },
+        {
+          "op": "click",
+          "target": "guild.approval.auto"
+        },
+        {
+          "op": "click",
+          "target": "guild.settings.save"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/update",
+          "role": "A"
+        },
+        {
+          "flow": "search",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "guild.join",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/join",
+          "role": "B"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE user_id=?",
+          "params": [
+            "${B_uid}"
+          ],
+          "expected": 1
+        },
+        {
+          "flow": "guild",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "guild.settings",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "guild.dropout",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/dropout",
+          "role": "B"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE user_id=?",
+          "params": [
+            "${B_uid}"
+          ],
+          "expected": 0
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "click",
+          "target": "guild.settings"
+        },
+        {
+          "op": "click",
+          "target": "guild.approval.manual"
+        },
+        {
+          "op": "click",
+          "target": "guild.settings.save"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/update",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "guild.members"
+        }
+      ],
+      "depends_on": [
+        "G05"
+      ]
+    },
+    {
+      "id": "G06",
+      "title": "重新申请与会长批准后刷新",
+      "criteria": [
+        "GC-07"
+      ],
+      "depends_on": [
+        "O01"
+      ],
+      "steps": [
+        {
+          "flow": "apply",
+          "role": "B"
+        },
+        {
+          "flow": "applicants"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "guild.approve"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/approve_subscription",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 2
+        },
+        {
+          "flow": "guild",
+          "role": "B"
+        },
+        {
+          "op": "visible",
+          "target": "guild.members",
+          "role": "B"
+        }
+      ]
+    },
+    {
+      "id": "G07",
+      "title": "普通成员管理入口禁用",
+      "criteria": [
+        "GC-07"
+      ],
+      "depends_on": [
+        "G06"
+      ],
+      "steps": [
+        {
+          "flow": "guild",
+          "role": "B"
+        },
+        {
+          "op": "disabled",
+          "target": "guild.invite.search",
+          "role": "B"
+        },
+        {
+          "op": "disabled",
+          "target": "guild.push",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "B"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT role FROM cn35_guild_members WHERE user_id=?",
+          "params": [
+            "${B_uid}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "G08",
+      "title": "任命副长与解除副长",
+      "criteria": [
+        "GC-07"
+      ],
+      "depends_on": [
+        "G07"
+      ],
+      "steps": [
+        {
+          "flow": "member_b"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "guild.role.sub"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/change_sub_master",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT role FROM cn35_guild_members WHERE user_id=?",
+          "params": [
+            "${B_uid}"
+          ],
+          "expected": 2
+        },
+        {
+          "flow": "member_b"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "guild.role.fire"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/fire_sub_master",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT role FROM cn35_guild_members WHERE user_id=?",
+          "params": [
+            "${B_uid}"
+          ],
+          "expected": 1
+        },
+        {
+          "flow": "guild",
+          "role": "B"
+        },
+        {
+          "op": "visible",
+          "target": "guild.members",
+          "role": "B"
+        }
+      ]
+    },
+    {
+      "id": "G09",
+      "title": "成员原路径与防卫读面",
+      "criteria": [
+        "GC-07"
+      ],
+      "depends_on": [
+        "G08"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "click",
+          "target": "guild.members"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/users/",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "guild.member.b"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 2
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "click",
+          "target": "guild.defense"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/monsters",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "defense.monster"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/deck",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_defense WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "compare": "ge"
+        }
+      ]
+    },
+    {
+      "id": "G10",
+      "title": "防卫设定和长按移除持久化",
+      "criteria": [
+        "GC-09"
+      ],
+      "depends_on": [
+        "G09"
+      ],
+      "steps": [
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "defense.monster"
+        },
+        {
+          "op": "click",
+          "target": "defense.assign"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/set_deck",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_defense WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "compare": "gt"
+        },
+        {
+          "op": "long_click",
+          "target": "defense.slot"
+        },
+        {
+          "op": "click",
+          "target": "defense.remove"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/remove_from_deck",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_defense WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0
+        },
+        {
+          "op": "visible",
+          "target": "defense.monster"
+        }
+      ]
+    },
+    {
+      "id": "G11",
+      "title": "六类设施读面与翻页返回",
+      "criteria": [
+        "GC-04"
+      ],
+      "depends_on": [
+        "G10"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "click",
+          "target": "guild.equipment"
+        },
+        {
+          "op": "visible",
+          "target": "equip.temporary"
+        },
+        {
+          "op": "visible",
+          "target": "equip.sp"
+        },
+        {
+          "op": "visible",
+          "target": "equip.hp"
+        },
+        {
+          "op": "visible",
+          "target": "equip.at"
+        },
+        {
+          "op": "click",
+          "target": "equip.next"
+        },
+        {
+          "op": "visible",
+          "target": "equip.taghness"
+        },
+        {
+          "op": "visible",
+          "target": "equip.bp_storage"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_equipment WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 0,
+          "compare": "ge"
+        }
+      ]
+    },
+    {
+      "id": "G12",
+      "title": "非会战窗口禁用与不建场",
+      "criteria": [
+        "GC-05"
+      ],
+      "depends_on": [
+        "G11"
+      ],
+      "steps": [
+        {
+          "op": "server",
+          "action": "off_window"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "disabled",
+          "target": "gw.chat"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_sessions WHERE status='open'",
+          "params": [],
+          "expected": 0
+        }
+      ]
+    },
+    {
+      "id": "G13",
+      "title": "正常日补水、取消和取出守恒",
+      "criteria": [
+        "GC-03"
+      ],
+      "depends_on": [
+        "G12"
+      ],
+      "steps": [
+        {
+          "op": "server",
+          "action": "next_day_open_window"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "click",
+          "target": "gw.own"
+        },
+        {
+          "op": "click",
+          "target": "gw.pray"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "bp_before"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT max_bp-bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "bp_gap"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT max_bp-bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "compare": "gt"
+        },
+        {
+          "op": "click",
+          "target": "bp.storage"
+        },
+        {
+          "op": "visible",
+          "target": "bp.confirm"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/bp_storage",
+          "role": "A"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT amount FROM cn35_guild_bp_storage WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "as": "pool_before"
+        },
+        {
+          "op": "click",
+          "target": "modal.no"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT amount FROM cn35_guild_bp_storage WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 0,
+          "expected_var": "pool_before"
+        },
+        {
+          "op": "click",
+          "target": "bp.storage"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/takeover_bp_storage",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "bp.success"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT max_bp-bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT amount FROM cn35_guild_bp_storage WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 0,
+          "compare": "lt",
+          "expected_var": "pool_before"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        }
+      ]
+    },
+    {
+      "id": "G14",
+      "title": "满BP拒绝且不重复补水",
+      "criteria": [
+        "GC-03"
+      ],
+      "depends_on": [
+        "G13"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "SELECT amount FROM cn35_guild_bp_storage WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "as": "pool_after"
+        },
+        {
+          "op": "click",
+          "target": "bp.storage"
+        },
+        {
+          "op": "visible",
+          "target": "bp.refuse"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/bp_storage",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT amount FROM cn35_guild_bp_storage WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 0,
+          "expected_var": "pool_after"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        }
+      ]
+    },
+    {
+      "id": "G15",
+      "title": "应援祈祷成本和贡献",
+      "criteria": [
+        "GC-05"
+      ],
+      "depends_on": [
+        "G14"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "help_bp_before"
+        },
+        {
+          "op": "click",
+          "target": "gw.own"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "gw.help"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/battles/help",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "help_bp_before",
+          "delta": -50
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "pray_bp_before"
+        },
+        {
+          "op": "click",
+          "target": "gw.own"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "gw.pray"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/battles/pray",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "pray_bp_before",
+          "delta": -15
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "visible",
+          "target": "gw.chat"
+        }
+      ]
+    },
+    {
+      "id": "G16",
+      "title": "单目标胜利与真实原路径付点；正GP掠夺另由协议层验证",
+      "criteria": [
+        "GC-05"
+      ],
+      "depends_on": [
+        "G15"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_attacks WHERE user_id=? AND status='cleared'",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "wins"
+        },
+        {
+          "flow": "battle"
+        },
+        {
+          "op": "request",
+          "path": "/battles/guild_quest_execute.json",
+          "role": "A"
+        },
+        {
+          "op": "request",
+          "path": "/battles/bp_use",
+          "role": "A"
+        },
+        {
+          "op": "request",
+          "path": "/battles/attack",
+          "role": "A",
+          "timeout": 600
+        },
+        {
+          "op": "visible",
+          "target": "gw.victory"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_attacks WHERE user_id=? AND status='cleared'",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "wins",
+          "delta": 1
+        }
+      ]
+    },
+    {
+      "id": "G17",
+      "title": "多目标出击两目标50BP",
+      "criteria": [
+        "GC-05"
+      ],
+      "depends_on": [
+        "G16"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "multi_bp"
+        },
+        {
+          "op": "click",
+          "target": "gw.enemy"
+        },
+        {
+          "op": "click",
+          "target": "gw.enemy2"
+        },
+        {
+          "op": "click",
+          "target": "gw.execute"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "click",
+          "target": "gw.start"
+        },
+        {
+          "op": "request",
+          "path": "/battles/bp_use",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "multi_bp",
+          "delta": -50
+        },
+        {
+          "op": "request",
+          "path": "/battles/attack",
+          "role": "A",
+          "timeout": 600
+        },
+        {
+          "op": "visible",
+          "target": "gw.victory"
+        }
+      ]
+    },
+    {
+      "id": "G18",
+      "title": "三目标70BP与败北上报",
+      "criteria": [
+        "GC-05"
+      ],
+      "depends_on": [
+        "G17"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "triple_bp"
+        },
+        {
+          "op": "click",
+          "target": "gw.enemy"
+        },
+        {
+          "op": "click",
+          "target": "gw.enemy2"
+        },
+        {
+          "op": "click",
+          "target": "gw.enemy3"
+        },
+        {
+          "op": "click",
+          "target": "gw.execute"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "click",
+          "target": "gw.weak_party"
+        },
+        {
+          "op": "click",
+          "target": "gw.start"
+        },
+        {
+          "op": "request",
+          "path": "/battles/bp_use",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT bp FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "triple_bp",
+          "delta": -70
+        },
+        {
+          "op": "request",
+          "path": "/battles/lose",
+          "role": "A",
+          "timeout": 600
+        },
+        {
+          "op": "visible",
+          "target": "gw.defeat"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_attacks WHERE user_id=? AND status='lost'",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "compare": "gt"
+        }
+      ]
+    },
+    {
+      "id": "G19",
+      "title": "同会留言可见与重开保持",
+      "criteria": [
+        "GC-08"
+      ],
+      "depends_on": [
+        "G18"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "click",
+          "target": "gw.chat"
+        },
+        {
+          "op": "request",
+          "path": "/battles/comments",
+          "role": "A"
+        },
+        {
+          "op": "set_text",
+          "target": "chat.input",
+          "value": "${marker}"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "chat.send"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "request",
+          "path": "/comments/create",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_battle_comments WHERE user_id=? AND body=?",
+          "params": [
+            "${A_uid}",
+            "${marker}"
+          ],
+          "expected": 1
+        },
+        {
+          "op": "visible",
+          "target": "chat.marker"
+        },
+        {
+          "op": "click",
+          "target": "modal.close"
+        },
+        {
+          "op": "click",
+          "target": "gw.chat"
+        },
+        {
+          "op": "visible",
+          "target": "chat.marker"
+        }
+      ]
+    },
+    {
+      "id": "G20",
+      "title": "另一个真实成员读到同一留言",
+      "criteria": [
+        "GC-08"
+      ],
+      "depends_on": [
+        "G19"
+      ],
+      "steps": [
+        {
+          "flow": "guild",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "gw.chat",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/battles/comments",
+          "role": "B"
+        },
+        {
+          "op": "visible",
+          "target": "chat.marker",
+          "role": "B"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_battle_comments WHERE body=?",
+          "params": [
+            "${marker}"
+          ],
+          "expected": 1
+        },
+        {
+          "op": "click",
+          "target": "modal.close",
+          "role": "B"
+        }
+      ]
+    },
+    {
+      "id": "G21",
+      "title": "客户端110字上限与超长输入截断/拒绝",
+      "criteria": [
+        "GC-08"
+      ],
+      "depends_on": [
+        "G20"
+      ],
+      "steps": [
+        {
+          "op": "set_text",
+          "target": "chat.input",
+          "value": "${long_message}"
+        },
+        {
+          "op": "text_equals",
+          "target": "chat.input",
+          "value": "${truncated_message}"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_battle_comments WHERE length(body)>110",
+          "params": [],
+          "expected": 0
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "modal.close"
+        },
+        {
+          "op": "click",
+          "target": "gw.chat"
+        },
+        {
+          "op": "request",
+          "path": "/battles/comments",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "chat.marker"
+        }
+      ]
+    },
+    {
+      "id": "G22",
+      "title": "关场结算奖励与重复访问去重",
+      "criteria": [
+        "GC-05",
+        "GC-09"
+      ],
+      "depends_on": [
+        "G21"
+      ],
+      "steps": [
+        {
+          "op": "server",
+          "action": "after_window"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_sessions WHERE status='settled'",
+          "params": [],
+          "expected": 0,
+          "compare": "gt"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_reward_claims WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "claims_after"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_reward_claims WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "claims_after"
+        },
+        {
+          "op": "visible",
+          "target": "guild.members"
+        }
+      ]
+    },
+    {
+      "id": "G23",
+      "title": "sp设施100资材投资、刷新与持久化",
+      "criteria": [
+        "GC-04"
+      ],
+      "depends_on": [
+        "G22"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "asset_before"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 100,
+          "compare": "ge"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT point FROM cn35_guild_equipment WHERE guild_id=? AND type_id=?),0)",
+          "params": [
+            "${gid}",
+            "sp"
+          ],
+          "as": "points_before"
+        },
+        {
+          "op": "click",
+          "target": "guild.equipment"
+        },
+        {
+          "op": "click",
+          "target": "equip.sp"
+        },
+        {
+          "op": "click",
+          "target": "equip.amount.100"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "equip.invest"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/invest",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "asset_before",
+          "delta": -100
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT point FROM cn35_guild_equipment WHERE guild_id=? AND type_id=?),0)",
+          "params": [
+            "${gid}",
+            "sp"
+          ],
+          "expected": 0,
+          "expected_var": "points_before",
+          "delta": 100
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        }
+      ]
+    },
+    {
+      "id": "G24",
+      "title": "hp设施100资材投资、刷新与持久化",
+      "criteria": [
+        "GC-04"
+      ],
+      "depends_on": [
+        "G23"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "asset_before"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 100,
+          "compare": "ge"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT point FROM cn35_guild_equipment WHERE guild_id=? AND type_id=?),0)",
+          "params": [
+            "${gid}",
+            "hp"
+          ],
+          "as": "points_before"
+        },
+        {
+          "op": "click",
+          "target": "guild.equipment"
+        },
+        {
+          "op": "click",
+          "target": "equip.hp"
+        },
+        {
+          "op": "click",
+          "target": "equip.amount.100"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "equip.invest"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/invest",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "asset_before",
+          "delta": -100
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT point FROM cn35_guild_equipment WHERE guild_id=? AND type_id=?),0)",
+          "params": [
+            "${gid}",
+            "hp"
+          ],
+          "expected": 0,
+          "expected_var": "points_before",
+          "delta": 100
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        }
+      ]
+    },
+    {
+      "id": "G25",
+      "title": "at设施100资材投资、刷新与持久化",
+      "criteria": [
+        "GC-04"
+      ],
+      "depends_on": [
+        "G24"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "asset_before"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 100,
+          "compare": "ge"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT point FROM cn35_guild_equipment WHERE guild_id=? AND type_id=?),0)",
+          "params": [
+            "${gid}",
+            "at"
+          ],
+          "as": "points_before"
+        },
+        {
+          "op": "click",
+          "target": "guild.equipment"
+        },
+        {
+          "op": "click",
+          "target": "equip.at"
+        },
+        {
+          "op": "click",
+          "target": "equip.amount.100"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "equip.invest"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/invest",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "asset_before",
+          "delta": -100
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT point FROM cn35_guild_equipment WHERE guild_id=? AND type_id=?),0)",
+          "params": [
+            "${gid}",
+            "at"
+          ],
+          "expected": 0,
+          "expected_var": "points_before",
+          "delta": 100
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        }
+      ]
+    },
+    {
+      "id": "G26",
+      "title": "taghness设施100资材投资、刷新与持久化",
+      "criteria": [
+        "GC-04"
+      ],
+      "depends_on": [
+        "G25"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "asset_before"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 100,
+          "compare": "ge"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT point FROM cn35_guild_equipment WHERE guild_id=? AND type_id=?),0)",
+          "params": [
+            "${gid}",
+            "taghness"
+          ],
+          "as": "points_before"
+        },
+        {
+          "op": "click",
+          "target": "guild.equipment"
+        },
+        {
+          "op": "click",
+          "target": "equip.next"
+        },
+        {
+          "op": "click",
+          "target": "equip.taghness"
+        },
+        {
+          "op": "click",
+          "target": "equip.amount.100"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "equip.invest"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/invest",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "asset_before",
+          "delta": -100
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT point FROM cn35_guild_equipment WHERE guild_id=? AND type_id=?),0)",
+          "params": [
+            "${gid}",
+            "taghness"
+          ],
+          "expected": 0,
+          "expected_var": "points_before",
+          "delta": 100
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        }
+      ]
+    },
+    {
+      "id": "G27",
+      "title": "bp_storage设施100资材投资、刷新与持久化",
+      "criteria": [
+        "GC-04"
+      ],
+      "depends_on": [
+        "G26"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "asset_before"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 100,
+          "compare": "ge"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT point FROM cn35_guild_equipment WHERE guild_id=? AND type_id=?),0)",
+          "params": [
+            "${gid}",
+            "bp_storage"
+          ],
+          "as": "points_before"
+        },
+        {
+          "op": "click",
+          "target": "guild.equipment"
+        },
+        {
+          "op": "click",
+          "target": "equip.next"
+        },
+        {
+          "op": "click",
+          "target": "equip.bp_storage"
+        },
+        {
+          "op": "click",
+          "target": "equip.amount.100"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "equip.invest"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/invest",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "asset_before",
+          "delta": -100
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT point FROM cn35_guild_equipment WHERE guild_id=? AND type_id=?),0)",
+          "params": [
+            "${gid}",
+            "bp_storage"
+          ],
+          "expected": 0,
+          "expected_var": "points_before",
+          "delta": 100
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        }
+      ]
+    },
+    {
+      "id": "G28",
+      "title": "月份榜、本会榜与两张奖励表",
+      "criteria": [
+        "GC-06"
+      ],
+      "depends_on": [
+        "G27"
+      ],
+      "steps": [
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "click",
+          "target": "rank.open"
+        },
+        {
+          "op": "request",
+          "path": "/guild_rankings",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "rank.history.guild"
+        },
+        {
+          "op": "click",
+          "target": "rank.my"
+        },
+        {
+          "op": "request",
+          "path": "/guild_rankings/my_guild",
+          "role": "A"
+        },
+        {
+          "op": "click",
+          "target": "rank.items"
+        },
+        {
+          "op": "request",
+          "path": "/guild_rankings/item_rewards",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "rank.item.first"
+        },
+        {
+          "op": "click",
+          "target": "modal.close"
+        },
+        {
+          "op": "click",
+          "target": "rank.skills"
+        },
+        {
+          "op": "request",
+          "path": "/guild_rankings/skill_rewards",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "rank.skill.first"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_member_scores WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "compare": "gt"
+        }
+      ]
+    },
+    {
+      "id": "G29",
+      "title": "跨月历史、月奖资产符文真实入账和去重",
+      "criteria": [
+        "GC-06"
+      ],
+      "depends_on": [
+        "G28"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "before_month"
+        },
+        {
+          "op": "server",
+          "action": "next_month"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_season_claims WHERE month=? AND user_id=?",
+          "params": [
+            "${closed_month}",
+            "${A_uid}"
+          ],
+          "expected": 1
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "before_month",
+          "compare": "gt"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_season_claims c JOIN cn35_player_skills s ON s.user_id=c.user_id AND s.uuid=c.skill_uuid WHERE c.month=? AND c.user_id=?",
+          "params": [
+            "${closed_month}",
+            "${A_uid}"
+          ],
+          "expected": 1
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "after_month"
+        },
+        {
+          "op": "click",
+          "target": "rank.open"
+        },
+        {
+          "op": "click",
+          "target": "rank.previous"
+        },
+        {
+          "op": "request",
+          "path": "/guild_rankings",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "rank.history.guild"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "after_month"
+        }
+      ]
+    },
+    {
+      "id": "G30",
+      "title": "踢人后被踢者重进与账号隔离",
+      "criteria": [
+        "GC-07"
+      ],
+      "depends_on": [
+        "G29"
+      ],
+      "steps": [
+        {
+          "flow": "member_b"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "guild.kick"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/dropout",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE guild_id=? AND user_id=?",
+          "params": [
+            "${gid}",
+            "${B_uid}"
+          ],
+          "expected": 0
+        },
+        {
+          "flow": "search",
+          "role": "B"
+        },
+        {
+          "op": "visible",
+          "target": "guild.result",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/search.json",
+          "role": "B"
+        }
+      ]
+    },
+    {
+      "id": "G31",
+      "title": "真实等待邀请登记与邀请拒绝",
+      "criteria": [
+        "GC-08"
+      ],
+      "depends_on": [
+        "G30"
+      ],
+      "steps": [
+        {
+          "op": "click",
+          "target": "waiting.register",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/waiting_users/add.json",
+          "role": "B"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_waiting_users WHERE user_id=?",
+          "params": [
+            "${B_uid}"
+          ],
+          "expected": 1
+        },
+        {
+          "flow": "invite_b"
+        },
+        {
+          "op": "request",
+          "path": "/waiting_users/invite/",
+          "role": "A"
+        },
+        {
+          "op": "request",
+          "path": "/waiting_users",
+          "role": "A"
+        },
+        {
+          "op": "click",
+          "target": "waiting.inbox",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "waiting.reject",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/waiting_users/recruit",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/reject_subscription",
+          "role": "B"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE guild_id=? AND user_id=?",
+          "params": [
+            "${gid}",
+            "${B_uid}"
+          ],
+          "expected": 0
+        },
+        {
+          "op": "visible",
+          "target": "guild.unjoined",
+          "role": "B"
+        }
+      ]
+    },
+    {
+      "id": "G32",
+      "title": "再次邀请、接受与队列收敛",
+      "criteria": [
+        "GC-08"
+      ],
+      "depends_on": [
+        "G31"
+      ],
+      "steps": [
+        {
+          "flow": "invite_b"
+        },
+        {
+          "op": "request",
+          "path": "/waiting_users/invite/",
+          "role": "A"
+        },
+        {
+          "op": "click",
+          "target": "waiting.inbox",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "waiting.accept",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/approve_subscription",
+          "role": "B"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE guild_id=? AND user_id=?",
+          "params": [
+            "${gid}",
+            "${B_uid}"
+          ],
+          "expected": 1
+        },
+        {
+          "flow": "guild",
+          "role": "B"
+        },
+        {
+          "op": "visible",
+          "target": "guild.members",
+          "role": "B"
+        }
+      ]
+    },
+    {
+      "id": "W01",
+      "title": "四可战窗口：morning",
+      "criteria": [
+        "GC-05"
+      ],
+      "steps": [
+        {
+          "op": "server",
+          "action": "morning"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "gw.chat"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_sessions s JOIN cn35_gw_participants p ON p.session_id=s.session_id WHERE p.guild_id=? AND s.field_index=? AND s.status='open'",
+          "params": [
+            "${gid}",
+            2
+          ],
+          "expected": 1
+        }
+      ],
+      "depends_on": [
+        "G32"
+      ]
+    },
+    {
+      "id": "W02",
+      "title": "四可战窗口：noon",
+      "criteria": [
+        "GC-05"
+      ],
+      "steps": [
+        {
+          "op": "server",
+          "action": "noon"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "gw.chat"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_sessions s JOIN cn35_gw_participants p ON p.session_id=s.session_id WHERE p.guild_id=? AND s.field_index=? AND s.status='open'",
+          "params": [
+            "${gid}",
+            5
+          ],
+          "expected": 1
+        }
+      ],
+      "depends_on": [
+        "W01"
+      ]
+    },
+    {
+      "id": "W03",
+      "title": "四可战窗口：evening",
+      "criteria": [
+        "GC-05"
+      ],
+      "steps": [
+        {
+          "op": "server",
+          "action": "evening"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "gw.chat"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_sessions s JOIN cn35_gw_participants p ON p.session_id=s.session_id WHERE p.guild_id=? AND s.field_index=? AND s.status='open'",
+          "params": [
+            "${gid}",
+            8
+          ],
+          "expected": 1
+        }
+      ],
+      "depends_on": [
+        "W02"
+      ]
+    },
+    {
+      "id": "W04",
+      "title": "四可战窗口：night",
+      "criteria": [
+        "GC-05"
+      ],
+      "steps": [
+        {
+          "op": "server",
+          "action": "night"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "gw.chat"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_sessions s JOIN cn35_gw_participants p ON p.session_id=s.session_id WHERE p.guild_id=? AND s.field_index=? AND s.status='open'",
+          "params": [
+            "${gid}",
+            11
+          ],
+          "expected": 1
+        }
+      ],
+      "depends_on": [
+        "W03"
+      ]
+    },
+    {
+      "id": "G33",
+      "title": "服务重启与双端冷启持久化",
+      "criteria": [
+        "GC-09",
+        "GC-10"
+      ],
+      "depends_on": [
+        "W04"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "restart_asset"
+        },
+        {
+          "op": "server",
+          "action": "restart_same_state"
+        },
+        {
+          "op": "restart_app",
+          "role": "A"
+        },
+        {
+          "op": "click",
+          "target": "login.start",
+          "role": "A"
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT COALESCE((SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='guild_asset'),0)",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "expected_var": "restart_asset"
+        },
+        {
+          "op": "restart_app",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "login.start",
+          "role": "B"
+        },
+        {
+          "flow": "guild",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/",
+          "role": "B"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 2
+        }
+      ]
+    },
+    {
+      "id": "G34",
+      "title": "重启下一窗口真实出击付点与结算",
+      "criteria": [
+        "GC-09"
+      ],
+      "depends_on": [
+        "G33"
+      ],
+      "steps": [
+        {
+          "op": "server",
+          "action": "next_window"
+        },
+        {
+          "flow": "battle"
+        },
+        {
+          "op": "request",
+          "path": "/battles/guild_quest_execute.json",
+          "role": "A"
+        },
+        {
+          "op": "request",
+          "path": "/battles/bp_use",
+          "role": "A"
+        },
+        {
+          "op": "request",
+          "path": "/battles/lose",
+          "role": "A",
+          "timeout": 600
+        },
+        {
+          "op": "visible",
+          "target": "gw.defeat"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_gw_attacks WHERE user_id=? AND status='lost'",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "compare": "gt"
+        }
+      ]
+    },
+    {
+      "id": "G35",
+      "title": "会长继任、旧会长退出与最后一人解散",
+      "criteria": [
+        "GC-07"
+      ],
+      "depends_on": [
+        "G34"
+      ],
+      "steps": [
+        {
+          "flow": "member_b"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "guild.role.master"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/change_master",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT role FROM cn35_guild_members WHERE user_id=?",
+          "params": [
+            "${B_uid}"
+          ],
+          "expected": 3
+        },
+        {
+          "flow": "guild"
+        },
+        {
+          "op": "click",
+          "target": "guild.settings"
+        },
+        {
+          "op": "click",
+          "target": "guild.dropout"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/dropout",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guild_members WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 1
+        },
+        {
+          "flow": "guild",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "guild.settings",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "guild.dropout",
+          "role": "B"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes",
+          "role": "B"
+        },
+        {
+          "op": "request",
+          "path": "/guilds/dropout",
+          "role": "B"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_guilds WHERE guild_id=?",
+          "params": [
+            "${gid}"
+          ],
+          "expected": 0
+        },
+        {
+          "op": "visible",
+          "target": "guild.unjoined",
+          "role": "B"
+        }
+      ]
+    }
+  ]
+}

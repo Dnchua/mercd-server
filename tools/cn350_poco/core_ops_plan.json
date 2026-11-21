@@ -1,0 +1,796 @@
+{
+  "schemaVersion": 1,
+  "single_actor": true,
+  "note": "CN3.5 核心实体（unit/monster/user）与玩家/背包养成写面 Poco 自动化验收计划；UI 候选必须经实机树逐项校准。每条用例均含 Poco UI 断言、本账号新增请求与只读 SQLite 断言。",
+  "flows": {
+    "home": [
+      {
+        "op": "click",
+        "target": "nav.home"
+      },
+      {
+        "op": "visible",
+        "target": "home.present_box"
+      }
+    ],
+    "units_menu": [
+      {
+        "op": "click",
+        "target": "nav.menu"
+      },
+      {
+        "op": "visible",
+        "target": "units.menu.list"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "U01",
+      "title": "旅馆主页与待领礼物箱读面",
+      "criteria": [
+        "CORE-USER-01",
+        "CORE-PRESENT-01"
+      ],
+      "steps": [
+        {
+          "op": "restart_app",
+          "role": "A"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "login.start"
+        },
+        {
+          "op": "request",
+          "path": "/user_presents/",
+          "role": "A",
+          "timeout": 40
+        },
+        {
+          "op": "click",
+          "target": "home.present_box"
+        },
+        {
+          "op": "visible",
+          "target": "present.receive_all"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_accounts WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 1
+        }
+      ]
+    },
+    {
+      "id": "U02",
+      "title": "礼物箱一键领取与库存入账",
+      "criteria": [
+        "CORE-PRESENT-02"
+      ],
+      "depends_on": [
+        "U01"
+      ],
+      "steps": [
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "present.receive_all"
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "request",
+          "path": "/user_presents/receive/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_user_presents WHERE user_id=? AND received_at>0",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "compare": "gt"
+        }
+      ]
+    },
+    {
+      "id": "U03",
+      "title": "主人公日常入口与不可思议之泉读面",
+      "criteria": [
+        "CORE-USER-02"
+      ],
+      "depends_on": [
+        "U01"
+      ],
+      "steps": [
+        {
+          "flow": "home"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "home.function_portal"
+        },
+        {
+          "op": "request",
+          "path": "/users/function_portal",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "portal.right_list"
+        },
+        {
+          "flow": "home"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "home.login_bonus_spring"
+        },
+        {
+          "op": "request",
+          "path": "/users/show_login_bonus",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "login_bonus.receive"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT login_bonus_receivable_sec FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "compare": "ge"
+        }
+      ]
+    },
+    {
+      "id": "U04",
+      "title": "不可思议之泉领取与金币木块入账",
+      "criteria": [
+        "CORE-USER-03"
+      ],
+      "depends_on": [
+        "U03"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='gacha_point'",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "gp_before_spring"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "login_bonus.receive"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/users/receive_login_bonus",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='gacha_point'",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected_var": "gp_before_spring",
+          "delta": 0,
+          "compare": "gt",
+          "expected": 0
+        }
+      ]
+    },
+    {
+      "id": "U05",
+      "title": "玩家个人主页读面与签名修改",
+      "criteria": [
+        "CORE-USER-04"
+      ],
+      "depends_on": [
+        "U01"
+      ],
+      "steps": [
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "swipe",
+          "target": "menu.scroll_area",
+          "value": [
+            0,
+            -0.25
+          ]
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "menu.user_profile"
+        },
+        {
+          "op": "request",
+          "path": "/users/show",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "user.memo.input"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "set_text",
+          "target": "user.memo.input",
+          "value": "${memo}"
+        },
+        {
+          "op": "request",
+          "path": "/users/update_memo",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT memo FROM cn35_player_profiles WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": "${memo}"
+        }
+      ]
+    },
+    {
+      "id": "U12",
+      "title": "图鉴目录与纪念版数值/中文简介读面",
+      "criteria": [
+        "CORE-ALBUM-01"
+      ],
+      "depends_on": [
+        "U01"
+      ],
+      "steps": [
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "menu.albums"
+        },
+        {
+          "op": "request",
+          "path": "/albums/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "album.unit.first"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_player_units WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "compare": "gt"
+        }
+      ]
+    },
+    {
+      "id": "U06",
+      "title": "同伴列表、纪念版中文档案详情与队长/助战/保护位",
+      "criteria": [
+        "CORE-UNIT-01",
+        "CORE-UNIT-02"
+      ],
+      "depends_on": [
+        "U01"
+      ],
+      "steps": [
+        {
+          "flow": "units_menu"
+        },
+        {
+          "op": "click",
+          "target": "units.menu.list"
+        },
+        {
+          "op": "visible",
+          "target": "unit.row.primary"
+        },
+        {
+          "op": "click",
+          "target": "unit.row.primary"
+        },
+        {
+          "op": "visible",
+          "target": "unit.detail.set_leader"
+        },
+        {
+          "op": "wait",
+          "seconds": 2
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "unit.detail.set_leader"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/user_units/set_leader",
+          "role": "A"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "unit.detail.set_helper"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/user_units/set_helper",
+          "role": "A"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT protected FROM cn35_player_units WHERE user_id=? AND unit_id=(SELECT leader_unit_id FROM cn35_player_profiles WHERE user_id=?)",
+          "params": [
+            "${A_uid}",
+            "${A_uid}"
+          ],
+          "as": "protect_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "unit.detail.protect"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/user_units/protect",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT protected FROM cn35_player_units WHERE user_id=? AND unit_id=(SELECT leader_unit_id FROM cn35_player_profiles WHERE user_id=?)",
+          "params": [
+            "${A_uid}",
+            "${A_uid}"
+          ],
+          "expected_var": "protect_before",
+          "expected": 0,
+          "compare": "ne"
+        }
+      ]
+    },
+    {
+      "id": "U07",
+      "title": "同伴等级训练与金币扣减持久化",
+      "criteria": [
+        "CORE-UNIT-03"
+      ],
+      "depends_on": [
+        "U06"
+      ],
+      "steps": [
+        {
+          "op": "capture_sql",
+          "sql": "SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='gacha_point'",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "gp_before_train"
+        },
+        {
+          "op": "click",
+          "target": "unit.detail.training"
+        },
+        {
+          "op": "visible",
+          "target": "unit.training.execute"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "unit.training.execute"
+        },
+        {
+          "op": "request",
+          "path": "/user_units/training",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT max(level) FROM cn35_player_units WHERE user_id=?",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 1,
+          "compare": "gt"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT amount FROM cn35_player_balances WHERE user_id=? AND currency='gacha_point'",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected_var": "gp_before_train",
+          "delta": 0,
+          "compare": "lt",
+          "expected": 0
+        }
+      ]
+    },
+    {
+      "id": "U08",
+      "title": "账号编队读取与同伴槽位上下阵持久化",
+      "criteria": [
+        "CORE-DECK-01"
+      ],
+      "depends_on": [
+        "U06"
+      ],
+      "steps": [
+        {
+          "flow": "units_menu"
+        },
+        {
+          "op": "click",
+          "target": "units.menu.decks"
+        },
+        {
+          "op": "visible",
+          "target": "deck.slot.first"
+        },
+        {
+          "op": "click",
+          "target": "deck.slot.first"
+        },
+        {
+          "op": "visible",
+          "target": "unit.row.second"
+        },
+        {
+          "op": "capture_sql",
+          "sql": "SELECT unit_id FROM cn35_player_deck_slots WHERE user_id=? AND party_id='1' AND slot_index=0",
+          "params": [
+            "${A_uid}"
+          ],
+          "as": "slot0_before"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "unit.row.second"
+        },
+        {
+          "op": "request",
+          "path": "/user_decks/on",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT unit_id FROM cn35_player_deck_slots WHERE user_id=? AND party_id='1' AND slot_index=0",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected_var": "slot0_before",
+          "expected": 0,
+          "compare": "ne"
+        }
+      ]
+    },
+    {
+      "id": "U09",
+      "title": "魔宠列表、装备/强化与进化选择页读面",
+      "criteria": [
+        "CORE-MONSTER-01",
+        "CORE-MONSTER-02"
+      ],
+      "depends_on": [
+        "U06"
+      ],
+      "steps": [
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "monsters.menu.list"
+        },
+        {
+          "op": "request",
+          "path": "/user_monsters/evolve_select_info",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "monster.row.primary"
+        },
+        {
+          "op": "click",
+          "target": "monster.row.primary"
+        },
+        {
+          "op": "visible",
+          "target": "monster.detail.equip"
+        },
+        {
+          "op": "click",
+          "target": "monster.detail.equip"
+        },
+        {
+          "op": "visible",
+          "target": "unit.row.third"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "unit.row.third"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/user_monsters/on",
+          "role": "A"
+        },
+        {
+          "op": "click",
+          "target": "monster.detail.powerup"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "monster.powerup.execute"
+        },
+        {
+          "op": "request",
+          "path": "/user_monsters/powerup",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_player_monsters WHERE user_id=? AND unit_id IS NOT NULL",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 1,
+          "compare": "ge"
+        }
+      ]
+    },
+    {
+      "id": "U10",
+      "title": "符文列表读面与同伴符文槽位装备持久化（保护 UI 客户端不存在，见证据）",
+      "criteria": [
+        "CORE-SKILL-01"
+      ],
+      "depends_on": [
+        "U06"
+      ],
+      "steps": [
+        {
+          "flow": "units_menu"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "units.menu.skills"
+        },
+        {
+          "op": "request",
+          "path": "/user_skills/",
+          "role": "A",
+          "timeout": 60
+        },
+        {
+          "op": "visible",
+          "target": "skill.row.primary"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "skill.row.primary"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "click",
+          "target": "unit.row.primary"
+        },
+        {
+          "op": "visible",
+          "target": "skill.equip.confirm"
+        },
+        {
+          "op": "click",
+          "target": "skill.equip.confirm"
+        },
+        {
+          "op": "request",
+          "path": "/user_skills/set_all",
+          "role": "A"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_player_skills WHERE user_id=? AND unit_id IS NOT NULL",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 1,
+          "compare": "ge"
+        }
+      ]
+    },
+    {
+      "id": "U11",
+      "title": "物品背包列表、体力药水使用与进化素材合成/分解",
+      "criteria": [
+        "CORE-ITEM-01",
+        "CORE-ITEM-02"
+      ],
+      "depends_on": [
+        "U01"
+      ],
+      "steps": [
+        {
+          "op": "click",
+          "target": "nav.menu"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "menu.user_items"
+        },
+        {
+          "op": "request",
+          "path": "/user_items/",
+          "role": "A"
+        },
+        {
+          "op": "click",
+          "target": "item.tab.other"
+        },
+        {
+          "op": "visible",
+          "target": "item.potion_ap.use"
+        },
+        {
+          "op": "mark"
+        },
+        {
+          "op": "click",
+          "target": "item.potion_ap.use"
+        },
+        {
+          "op": "click",
+          "target": "modal.yes"
+        },
+        {
+          "op": "request",
+          "path": "/user_items/use/",
+          "role": "A"
+        },
+        {
+          "op": "visible",
+          "target": "modal.ok"
+        },
+        {
+          "op": "click",
+          "target": "modal.ok"
+        },
+        {
+          "op": "assert_sql",
+          "sql": "SELECT count(*) FROM cn35_player_items WHERE user_id=? AND quantity>0",
+          "params": [
+            "${A_uid}"
+          ],
+          "expected": 0,
+          "compare": "gt"
+        }
+      ]
+    }
+  ]
+}

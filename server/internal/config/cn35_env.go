@@ -29,6 +29,11 @@ func (c *CN35Config) ApplyCN35Env(fs *flag.FlagSet) error {
 		{"event-log", "MERCD_EVENT_LOG"},
 		{"v", "MERCD_VERBOSE"},
 		{"hardness-profile", "MERCD_HARDNESS_PROFILE"},
+		{"raid-boss-id", "MERCD35_RAID_BOSS_ID"},
+		{"raid-trigger-rate", "MERCD35_RAID_TRIGGER_RATE"},
+		{"raid-ttl-sec", "MERCD35_RAID_TTL_SEC"},
+		{"raid-solo-assist", "MERCD35_RAID_SOLO_ASSIST"},
+		{"event-windows", "MERCD35_EVENT_WINDOWS"},
 	} {
 		if explicit[binding.flag] {
 			continue

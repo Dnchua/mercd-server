@@ -200,9 +200,10 @@ func TestGWQuestExecuteOriginalShape(t *testing.T) {
 			t.Fatalf("quest.%s = %#v, want %v", k, quest[k], want)
 		}
 	}
+	// Lv.1 新建公会食堂 Lv.1 → guild_asset_help_level_base=1；mlk Lv.70 食堂=3 见 guild_facility_battle_test.go。
 	for k, want := range map[string]float64{
-		"guild_asset_help_level_base": 3, "battle_rank_help_level_rate": 2,
-		"battle_help_initial_level": 6,
+		"guild_asset_help_level_base": 1, "battle_rank_help_level_rate": 2,
+		"battle_help_initial_level": 2,
 	} {
 		got, ok := doc[k].(float64)
 		if !ok || got != want {

@@ -47,6 +47,43 @@ func chaptersHandler(dep Deps, cat *storyCatalog) httpapi.Handler {
 	})
 }
 
+// chaptersListHandler GET|POST /chapters/list：兼容 ChaptersAndStories（>=210）
+// 路径，一次性下发 chapters.quest 与按 chapter_id 分组的 stories 映射。
+func chaptersListHandler(dep Deps, cat *storyCatalog) httpapi.Handler {
+	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
+		questChapters := make([]any, 0, len(cat.chapters))
+		storiesByChapter := make(map[string]any, len(cat.chapters))
+		for i, ch := range cat.chapters {
+			cd := chapterDoc(ch)
+			cd["order_num"] = i + 1
+			cd["main_story"] = true
+			cd["released"] = true
+			cd["story_type_id"] = 1
+			questChapters = append(questChapters, cd)
+
+			eps := cat.byChapter[ch.ID]
+			rows := make([]any, 0, len(eps))
+			for _, s := range eps {
+				rows = append(rows, storyRowDoc(s.meta))
+			}
+			storiesByChapter[strconv.Itoa(ch.ID)] = rows
+		}
+		c.Decoded = map[string]any{
+			"cn35": true, "uid": req.UserID, "endpoint": "chapters_list",
+			"chapters": len(questChapters), "stories": len(cat.stories),
+		}
+		return cn35wire.MarshalJSON(map[string]any{
+			"data": map[string]any{
+				"chapters": map[string]any{
+					"quest": questChapters,
+					"event": []any{},
+				},
+				"stories": storiesByChapter,
+			},
+		})
+	})
+}
+
 // chapterDoc 一条章节行：id/name/background_asset_name（行部件直读）
 // + chapter_select_option（深合并进 Stories 页配置：requireData 拉取
 // stories_<id>、ListParts.data_key、Header.title_right_label）。
@@ -105,12 +142,28 @@ func storyRowDoc(e storyIndexEntry) map[string]any {
 	if title := sanitizePageMessageValue(e.Title); title != "" {
 		msg += "&title=" + title
 	}
+	subTitle := e.SubTitle
+	if subTitle == "" && e.OrderNum > 0 {
+		subTitle = fmt.Sprintf("第%d话", e.OrderNum)
+	}
+	readTimingID := e.ReadTimingID
+	if readTimingID <= 0 {
+		readTimingID = 1
+	}
+	storyTypeID := e.StoryTypeID
+	if storyTypeID <= 0 {
+		storyTypeID = 1
+	}
 	return map[string]any{
 		"id":                            e.ID,
 		"chapter_id":                    e.ChapterID,
 		"order_num":                     e.OrderNum,
 		"title":                         e.Title,
-		"sub_title":                     e.SubTitle,
+		"sub_title":                     subTitle,
+		"area_id":                       e.AreaID,
+		"quest_id":                      e.QuestID,
+		"read_timing_id":                readTimingID,
+		"story_type_id":                 storyTypeID,
 		"sub_story":                     false,
 		"unit_asset_name":               "",
 		"story_read_additional_message": msg,

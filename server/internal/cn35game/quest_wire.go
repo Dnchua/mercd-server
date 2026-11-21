@@ -56,6 +56,9 @@ type catalogArea struct {
 	NoDifficulty bool   `json:"no_difficulty"`
 	// AlwaysOpen 常驻开放（资源副本；由 DB 配置合并层置位，fixture 不配）。
 	AlwaysOpen bool `json:"always_open,omitempty"`
+	// EventID M8 当期活动区域（serve_event_catalog.json 合并层置位）；
+	// 非 0 时区域不属于剧情链，解锁走活动推进边界与时间窗。
+	EventID int `json:"-"`
 }
 
 type catalogQuest struct {
@@ -89,6 +92,13 @@ type catalogQuest struct {
 	BackgroundPool []int `json:"background_pool,omitempty"`
 	// AlwaysOpen 常驻开放（资源副本合并层置位）：不受剧情进度指针门禁。
 	AlwaysOpen bool `json:"always_open,omitempty"`
+	// DifficultyOptionName execute 回显 quest.difficulty_option_name（周常「周六」等）。
+	DifficultyOptionName string `json:"difficulty_option_name,omitempty"`
+	// Kind M8 合并层置位：""=剧情/资源本，"event"=当期活动，"daily"=周常。
+	Kind string `json:"-"`
+	// EventID 活动关所属活动；Wday 周常关所属星期（周日=0）。
+	EventID int `json:"-"`
+	Wday    int `json:"-"`
 	// Battle 是 07 引入的 execute/结算样本段；nil 表示该关未配战斗数据
 	// （fixture 校验层要求正式剧情关必须带 battle 块，见 validateBattle）。
 	Battle *catalogBattle `json:"battle"`
@@ -276,7 +286,7 @@ func (c *questCatalog) areaByID(id int) *catalogArea {
 // 到 900xx 资源 ID 空间。
 func (c *questCatalog) nextQuest(id int) *catalogQuest {
 	for i := range c.Quests {
-		if c.Quests[i].ID > id && !c.Quests[i].AlwaysOpen {
+		if c.Quests[i].ID > id && !c.Quests[i].AlwaysOpen && c.Quests[i].Kind == "" {
 			return &c.Quests[i]
 		}
 	}
@@ -596,7 +606,7 @@ func areaUnlocked(a catalogArea, prog *QuestProgress) bool {
 // 小于 900xx 的剧情关一次性视为已解锁。
 func (c *questCatalog) storyQuestID(id int) bool {
 	q := c.questMap[id]
-	return q != nil && !q.AlwaysOpen
+	return q != nil && !q.AlwaysOpen && q.Kind == ""
 }
 
 func (c *questCatalog) questUnlocked(q catalogQuest, prog *QuestProgress) bool {
@@ -733,6 +743,14 @@ func questsHandler(dep Deps) httpapi.Handler {
 		for _, a := range cat.Areas {
 			if a.ID != areaID {
 				continue
+			}
+			// M8 活动区域：解锁走活动时间窗 + 推进边界（客户端按
+			// user_event_condition 过滤），不受剧情指针约束。
+			if a.EventID != 0 && cat.events != nil {
+				if ev := cat.events.byID[a.EventID]; ev != nil {
+					list = eventAreaQuestDocs(dep, cat, ev, areaID, prog)
+				}
+				break
 			}
 			if areaUnlocked(a, prog) {
 				for _, q := range cat.questsOfArea(areaID) {

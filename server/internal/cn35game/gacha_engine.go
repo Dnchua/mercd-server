@@ -524,9 +524,10 @@ func (e *gachaEngine) drawMany(state gachaPityState, count int) ([]gachaDrawResu
 	if count < 1 {
 		return nil, state, fmt.Errorf("gacha engine: count=%d 必须为正", count)
 	}
-	if count > e.pool.MaxExecutableCount {
+	maxDraws := e.pool.MaxExecutableCount + e.pool.MaxExecuteBonus
+	if count > maxDraws {
 		return nil, state, fmt.Errorf("gacha engine: count=%d 超出池 %q 上限 %d",
-			count, e.pool.PoolID, e.pool.MaxExecutableCount)
+			count, e.pool.PoolID, maxDraws)
 	}
 	out := make([]gachaDrawResult, 0, count)
 	cur := state

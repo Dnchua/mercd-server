@@ -1,0 +1,143 @@
+{
+  "module": "M7",
+  "version": "cn350-m7-candidate-v1",
+  "single_actor": true,
+  "implementation_ready": false,
+  "note": "M7 主线剧情移植 + 泉水随机 5-100 徽章 + 契约书9折十连 + 33池特殊招募与信券离线候选冒泡计划；本轮未做实机校准与实机运行，implementation_ready 保持 false。",
+  "flows": {},
+  "cases": [
+    {
+      "id": "M701",
+      "name": "主线 11 章 / 533 话剧情目录加载与正文阅读",
+      "criteria": [
+        "系统→故事进入后触发 /chapters/ 返回 11 章",
+        "点击第 1 章可进入剧情对话界面且无假名说话人报错"
+      ],
+      "steps": [
+        {"op": "capture_sql", "sql": "${m7_01_snapshot_sql}", "params": ["${A_uid}"], "as": "m7_01_before"},
+        {"op": "mark"},
+        {"op": "click", "target": "nav.menu"},
+        {"op": "click", "target": "nav.story_entry"},
+        {"op": "request", "path": "/chapters/"},
+        {"op": "visible", "target": "story.chapter.first"},
+        {"op": "visible", "target": "story.chapter.last"},
+        {"op": "click", "target": "story.chapter.first"},
+        {"op": "request", "path": "/stories/list"},
+        {"op": "click", "target": "story.episode.first"},
+        {"op": "request", "path": "/stories/read/4.json"},
+        {"op": "visible", "target": "story.reader.panel"},
+        {"op": "assert_sql", "sql": "${m7_01_assert_sql}", "params": ["${A_uid}", "${m7_01_before}"], "compare": "eq", "expected": 1}
+      ]
+    },
+    {
+      "id": "M702",
+      "name": "不可思议之泉周期领取随机 5-100 徽章落库",
+      "criteria": [
+        "泉水领取请求 /users/receive_login_bonus 成功且弹窗展示徽章项",
+        "cn35_spring_claims.medal 落在 [5,100] 且 cn35_player_balances 同步增量"
+      ],
+      "steps": [
+        {"op": "capture_sql", "sql": "${m7_02_snapshot_sql}", "params": ["${A_uid}"], "as": "m7_02_before"},
+        {"op": "mark"},
+        {"op": "click", "target": "nav.home"},
+        {"op": "click", "target": "home.login_bonus_spring"},
+        {"op": "request", "path": "/users/show_login_bonus"},
+        {"op": "click", "target": "login_bonus.receive"},
+        {"op": "request", "path": "/users/receive_login_bonus"},
+        {"op": "visible", "target": "spring.modal.medal"},
+        {"op": "click", "target": "modal.ok"},
+        {"op": "assert_sql", "sql": "${m7_02_assert_sql}", "params": ["${A_uid}", "${m7_02_before}"], "compare": "eq", "expected": 1}
+      ]
+    },
+    {
+      "id": "M703",
+      "name": "面包店 5 钻兑换骑士契约书",
+      "criteria": [
+        "进入面包店可看到固定商品 id=10000 骑士契约书",
+        "购买成功触发 /red_diamond_shop/buy 并扣减钻石增加 scout_book_1"
+      ],
+      "steps": [
+        {"op": "capture_sql", "sql": "${m7_03_snapshot_sql}", "params": ["${A_uid}"], "as": "m7_03_before"},
+        {"op": "mark"},
+        {"op": "click", "target": "breadshop.open"},
+        {"op": "request", "path": "/red_diamond_shop/"},
+        {"op": "click", "target": "breadshop.tab.fixed"},
+        {"op": "click", "target": "breadshop.scout_book.buy"},
+        {"op": "click", "target": "modal.yes"},
+        {"op": "request", "path": "/red_diamond_shop/buy"},
+        {"op": "visible", "target": "modal.ok"},
+        {"op": "click", "target": "modal.ok"},
+        {"op": "assert_sql", "sql": "${m7_03_assert_sql}", "params": ["${A_uid}", "${m7_03_before}"], "compare": "eq", "expected": 1}
+      ]
+    },
+    {
+      "id": "M704",
+      "name": "常驻钻石池骑士契约书十连 9 折（9 本抽 10 次）",
+      "depends_on": ["M703"],
+      "criteria": [
+        "切换契约书模式后点击 9 本十连按钮触发 /gachas/execute",
+        "DB 操作记录 draw_count=10, currency='scout_book_1', total_cost=9 且逐抽表写满 10 行"
+      ],
+      "steps": [
+        {"op": "capture_sql", "sql": "${m7_04_snapshot_sql}", "params": ["${A_uid}"], "as": "m7_04_before"},
+        {"op": "mark"},
+        {"op": "click", "target": "nav.gacha"},
+        {"op": "request", "path": "/gachas"},
+        {"op": "click", "target": "gacha.scout_book.toggle"},
+        {"op": "click", "target": "gacha.slot2.ten_pull"},
+        {"op": "click", "target": "modal.yes"},
+        {"op": "request", "path": "/gachas/execute", "decoded": {"gacha_count": 10, "use_scout_book": true}},
+        {"op": "visible", "target": "gacha.result.list"},
+        {"op": "click", "target": "modal.close"},
+        {"op": "assert_sql", "sql": "${m7_04_assert_sql}", "params": ["${A_uid}", "${m7_04_before}"], "compare": "eq", "expected": 1}
+      ]
+    },
+    {
+      "id": "M705",
+      "name": "每日轮换特殊招募主题池（槽1）十连及共享保底",
+      "depends_on": ["M703"],
+      "criteria": [
+        "槽 1 展示当期轮换主题池并允许骑士契约书 9 折十连",
+        "cn35_gacha_operations.pool_id 落入 101..133 且更新 cn350-limited-up 保底行"
+      ],
+      "steps": [
+        {"op": "capture_sql", "sql": "${m7_05_snapshot_sql}", "params": ["${A_uid}"], "as": "m7_05_before"},
+        {"op": "mark"},
+        {"op": "click", "target": "nav.gacha"},
+        {"op": "click", "target": "gacha.slot1.banner"},
+        {"op": "click", "target": "gacha.scout_book.toggle"},
+        {"op": "click", "target": "gacha.slot1.ten_pull"},
+        {"op": "click", "target": "modal.yes"},
+        {"op": "request", "path": "/gachas/execute", "decoded": {"gacha_count": 10, "use_scout_book": true}},
+        {"op": "visible", "target": "gacha.result.list"},
+        {"op": "click", "target": "modal.close"},
+        {"op": "assert_sql", "sql": "${m7_05_assert_sql}", "params": ["${A_uid}", "${m7_05_before}"], "compare": "eq", "expected": 1}
+      ]
+    },
+    {
+      "id": "M706",
+      "name": "背包 3 星契约书 6 合 1 与 ★3 信 5 枚单抽",
+      "criteria": [
+        "3星契约书合成走 /gachas/exchange_scout_book 增发 scout_book_4star",
+        "礼物匣 ★3 信点击使用触发 /gachas/execute?id=11 扣减 5 枚并发放 1 名同伴"
+      ],
+      "steps": [
+        {"op": "capture_sql", "sql": "${m7_06_snapshot_sql}", "params": ["${A_uid}"], "as": "m7_06_before"},
+        {"op": "mark"},
+        {"op": "click", "target": "nav.menu"},
+        {"op": "click", "target": "menu.user_items"},
+        {"op": "request", "path": "/user_items/"},
+        {"op": "click", "target": "item.tab.other"},
+        {"op": "click", "target": "item.scout_book_3star.exchange"},
+        {"op": "click", "target": "modal.yes"},
+        {"op": "request", "path": "/gachas/exchange_scout_book"},
+        {"op": "click", "target": "item.tab.tickets"},
+        {"op": "request", "path": "/gachas/ticket_available_list"},
+        {"op": "click", "target": "item.ticket_11.use"},
+        {"op": "request", "path": "/gachas/execute", "decoded": {"gacha_count": 1, "ticket_pool": "11"}},
+        {"op": "visible", "target": "gacha.result.list"},
+        {"op": "assert_sql", "sql": "${m7_06_assert_sql}", "params": ["${A_uid}", "${m7_06_before}"], "compare": "eq", "expected": 1}
+      ]
+    }
+  ]
+}

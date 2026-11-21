@@ -1,0 +1,542 @@
+{
+  "m5.ability.left_slot": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_ability_left_slot_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.ability.preview": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_ability_preview_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.ability.right_slot": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_ability_right_slot_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.ability.submit": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_ability_submit_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.ability.target": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_ability_target_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.ability.target_a": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_ability_target_a_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.ability.target_b": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_ability_target_b_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.battle.finish": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_battle_finish_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.battle.guts": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_battle_guts_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.battle.hud": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_battle_hud_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.battle.pause": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_battle_pause_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.battle.retreat": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_battle_retreat_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.battle.seed": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_battle_seed_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.battle.sp": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_battle_sp_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.battle.unit": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_battle_unit_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.battle.win": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_battle_win_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.egg.execute_btn": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_egg_execute_btn_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.egg.modal": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_egg_modal_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.egg.tier_btn": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_egg_tier_btn_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.evolve.material": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_evolve_material_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.evolve.material_confirm": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_evolve_material_confirm_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.evolve.preview": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_evolve_preview_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.evolve.submit": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_evolve_submit_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.merge.formula_monster_row": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_merge_formula_monster_row_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.merge.select_egg_btn": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_merge_select_egg_btn_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.merge.select_monster_btn": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_merge_select_monster_btn_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.modal.error": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_modal_error_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.monster.evolve": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_monster_evolve_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.monster.list": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_monster_list_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.monster.merge_btn": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_monster_merge_btn_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.monster.panel": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_monster_panel_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.monster.scale_limit": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_monster_scale_limit_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.monster.sell": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_monster_sell_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.monster.sell_decided": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_monster_sell_decided_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.monster.sell_target": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_monster_sell_target_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.quest.entry": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_quest_entry_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.quest.result": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_quest_result_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.quest.start": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_quest_start_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.quest.target": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_quest_target_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.rune.off": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_rune_off_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.ability": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_ability_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.ability_value": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_ability_value_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.at": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_at_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.evolutable_row": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_evolutable_row_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.evolution_btn": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_evolution_btn_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.evolution_modal": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_evolution_modal_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.evolution_submit": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_evolution_submit_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.hp": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_hp_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.list": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_list_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.panel": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_panel_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.rune_slot": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_rune_slot_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.sell": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_sell_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.sell_decided": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_sell_decided_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.sell_target": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_sell_target_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.upgrade": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_upgrade_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.unit.upgrade_level": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_unit_upgrade_level_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.upgrade.cost": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_upgrade_cost_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.upgrade.preview": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_upgrade_preview_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.upgrade.submit": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_upgrade_submit_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  },
+  "m5.upgrade.unaffordable_target": {
+    "selector": {
+      "attrs": {
+        "name": "${m5_upgrade_unaffordable_target_name}"
+      }
+    },
+    "status": "unobserved-requires-device-tree",
+    "note": "仅语义别名，尚无真实 Unity ID；须 inspect 后确定 attrs/父子层级并 calibrate，禁止把变量名当真实 ID。"
+  }
+}

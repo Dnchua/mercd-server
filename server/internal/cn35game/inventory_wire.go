@@ -291,7 +291,7 @@ func buildUnitDoc(rec UnitRecord, u *cardcatalog.Unit) (map[string]any, error) {
 		"monster_scale":              1.0,
 		"story_id":                   nil,
 		"is_evolutable":              false,
-		"evolution_map":              map[string]any{"id": 0, "need": map[string]any{}},
+		"evolution_map":              map[string]any{},
 		"evolution_map_desc":         map[string]any{},
 		"monster_uuid":               rec.MonsterUUID,
 		"monster_scale_category_str": "标准",
@@ -446,6 +446,14 @@ func buildUnitDoc(rec UnitRecord, u *cardcatalog.Unit) (map[string]any, error) {
 	if v, ok := ut["effect_y"].(float64); ok {
 		doc["effect_y"] = v
 	}
+	if evoRule, ok := UnitEvolutionRule(u.ID, u.Element); ok {
+		doc["evolution_map"] = map[string]any{
+			"id":   evoRule.ToUnitID,
+			"need": evoRule.Need,
+		}
+		doc["evolution_map_desc"] = evoRule.Desc
+		doc["is_evolutable"] = rec.Level >= panel.BaseMaxLevel
+	}
 	return doc, nil
 }
 
@@ -479,6 +487,7 @@ func unitInstanceUUID(unitID int) string {
 //   - `scale_limit`/`is_rare` 未证（NULL）时**省略键**，不填 0/false 伪造。
 //   - 客户端消费：Monster.GetScaleCategory（scale/is_rare/scale_limit/real_scale）、
 //     MonsterPowerupModal.InitDisplay（hp/seed_at）、UpdateLabel（base_hp/base_seed_at）。
+//
 // MonsterBatch 返回魔宠的同批排重标记（对齐国服 2017-11 抓包 guilds_monsters.json / preset_data.json）：
 //   - 普通魔宠返回 -1（客户端 checkSelectMonsterLimit 对 batch < 0 直接放行，允许防卫槽同时配置不同普通魔宠）；
 //   - 五系融合培育稀有魔宠（培育方式：X之蛋+Y，id 100005..100045）按系列返回固定非负批次号，
@@ -500,6 +509,52 @@ func MonsterBatch(monsterID int) int {
 	}
 }
 
+// MonsterFormulaID 返回魔宠融合配方标识（MergeMonsterSelectMaterial.cs:270 过滤
+// formula_id != 0 的魔宠作为主素材；mlk 抓包实证：五只基底 3★ 魔宠 14/22/23/24/26
+// 与五系融合 4★ 魔宠 100005..100045 的 formula_id = 1，其余为 0）。
+func MonsterFormulaID(monsterID int) int {
+	switch monsterID {
+	case 14, 22, 23, 24, 26:
+		return 1
+	default:
+		if MonsterBatch(monsterID) >= 0 {
+			return 1
+		}
+		return 0
+	}
+}
+
+// DefaultFusionMonsterScaleLimit 返回五系融合 4★ 魔宠（100005..100045）的默认体型上限。
+func DefaultFusionMonsterScaleLimit(monsterID int) float64 {
+	switch monsterID {
+	case 100005, 100009, 100018, 100038, 100042:
+		return 1.850
+	case 100019:
+		return 1.913
+	case 100006, 100010, 100039, 100043:
+		return 1.923
+	case 100007, 100011, 100020, 100040, 100044:
+		return 2.023
+	case 100008, 100012, 100021, 100041, 100045:
+		return 2.300
+	default:
+		return 1.800
+	}
+}
+
+func monsterScaleCategoryStr(scale float64) string {
+	switch {
+	case scale < 1.35:
+		return "幼年期"
+	case scale < 1.55:
+		return "成长期"
+	case scale < 1.70:
+		return "成熟期"
+	default:
+		return "完全体"
+	}
+}
+
 func buildMonsterDoc(rec MonsterRecord, m *cardcatalog.Monster) (map[string]any, error) {
 	// 有效 Size：展示用与推进用分别回退，最后落到显式降级值 1.000。
 	// 实机证据（2026-09-30）：客户端 Document.dec/f 按数值解析，字符串态
@@ -513,10 +568,7 @@ func buildMonsterDoc(rec MonsterRecord, m *cardcatalog.Monster) (map[string]any,
 		return nil, fmt.Errorf("cn35 魔宠 %s real_scale 非法: %w", rec.UUID, err)
 	}
 	batch := MonsterBatch(rec.MonsterID)
-	formulaID := 0
-	if batch >= 0 {
-		formulaID = 1
-	}
+	formulaID := MonsterFormulaID(rec.MonsterID)
 	doc := map[string]any{
 		"uuid":             rec.UUID,
 		"id":               rec.MonsterID,
@@ -532,9 +584,10 @@ func buildMonsterDoc(rec MonsterRecord, m *cardcatalog.Monster) (map[string]any,
 		"attr_name":        attrName[m.Element],
 		"skin_id":          m.Skin,
 		"type_id":          m.Skin,
-		"category_str":     "普通",
+		"category_str":     monsterScaleCategoryStr(displayScaleF),
 		"batch":            batch,
 		"formula_id":       formulaID,
+		"fusion_degrees":   rec.FusionDegrees,
 		"hardness_id":      2,
 		"price":            m.Rare * 100,
 		"skill_sort_order": 0,
@@ -602,16 +655,21 @@ func buildMonsterDoc(rec MonsterRecord, m *cardcatalog.Monster) (map[string]any,
 			"warning_time":        0,
 		},
 	}
-	// scale_limit/is_rare 未证时省略键（不填伪值）。
+	// scale_limit/is_rare 未证时省略键（不填伪值）；五系融合 4★ 魔宠（batch>=0）
+	// 具备 mlk 抓包实证的默认 scale_limit 与 is_rare=true。
 	if rec.ScaleLimit != nil {
 		limitF, lerr := strconv.ParseFloat(strings.TrimSpace(*rec.ScaleLimit), 64)
 		if lerr != nil {
 			return nil, fmt.Errorf("cn35 魔宠 %s scale_limit 非法: %w", rec.UUID, lerr)
 		}
 		doc["scale_limit"] = limitF
+	} else if batch >= 0 {
+		doc["scale_limit"] = DefaultFusionMonsterScaleLimit(rec.MonsterID)
 	}
 	if rec.IsRare != nil {
 		doc["is_rare"] = *rec.IsRare
+	} else if batch >= 0 {
+		doc["is_rare"] = true
 	}
 	// 介绍/出没地：国服真实录包中文优先，其次 CN catalog，缺则纪念版补缺。
 	mt := memorialMonsterText(m.ID)
@@ -638,7 +696,13 @@ func buildMonsterDoc(rec MonsterRecord, m *cardcatalog.Monster) (map[string]any,
 	if skID, skV, skV2 := MonsterSeedSkill(m); skID != 0 {
 		doc["seed_skill_id"] = skID
 		doc["seed_skill_value"] = skV
+		doc["seed_skill_value_20"] = skV
+		doc["seed_skill_value_30"] = skV
+		doc["seed_skill_value_35"] = skV
 		doc["seed_skill_value2"] = skV2
+		doc["seed_skill_value2_20"] = skV2
+		doc["seed_skill_value2_30"] = skV2
+		doc["seed_skill_value2_35"] = skV2
 	}
 	// 召唤 cutin 构图默认（生产样本：cutin_x=-90 cutin_y=-100
 	// cutin_scale=1.3；未取证逐怪差分前按该默认下发）。
@@ -750,6 +814,27 @@ func buildMonsterDoc(rec MonsterRecord, m *cardcatalog.Monster) (map[string]any,
 		at := statmodel.MonsterAt(base, progScale)
 		doc["at"] = at
 		doc["seed_at"] = at
+	}
+	if batch >= 0 {
+		if _, has := doc["call_interval_ms"]; !has {
+			doc["sklcd"] = 20
+			doc["call_interval_ms"] = 20000
+		}
+		if c, ok := doc["cost"].(int); ok && c == 0 {
+			doc["cost"], doc["sklsp"] = 180, 180
+		}
+		if _, has := doc["base_hp"]; !has {
+			base := 50000
+			doc["base_hp"] = base
+			doc["hp"] = statmodel.MonsterHP(base, progScale)
+		}
+		if _, has := doc["base_seed_at"]; !has {
+			base := 8000
+			doc["base_seed_at"] = base
+			at := statmodel.MonsterAt(base, progScale)
+			doc["at"] = at
+			doc["seed_at"] = at
+		}
 	}
 	setRate(doc, "fire_rate", m.Rates.Fire)
 	setRate(doc, "water_rate", m.Rates.Aqua)
@@ -908,6 +993,7 @@ func inventoryDataFor(dep Deps, c *httpapi.Ctx, userID string) (map[string]any, 
 	if err != nil {
 		return nil, err
 	}
+	fateEntries := fateEntriesFor(dep, userID)
 	monsters := []any{}
 	monsterByUUID := map[string]map[string]any{}
 	for _, r := range mrecs {
@@ -941,6 +1027,7 @@ func inventoryDataFor(dep Deps, c *httpapi.Ctx, userID string) (map[string]any, 
 			}
 		}
 		applyUnitSkills(udoc, u.Rare, r.DuplicatedCount, skillsByUnit[r.UnitID])
+		ApplyUnitFateBuffs(udoc, u.Element, fateEntries)
 		units = append(units, udoc)
 	}
 	data := map[string]any{"user_units": units, "user_monsters": monsters}

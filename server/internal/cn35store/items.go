@@ -592,3 +592,104 @@ func balanceOfTx(tx *sql.Tx, userID, currency string) int64 {
 		WHERE user_id=? AND currency=?`, userID, currency).Scan(&amt)
 	return amt
 }
+
+var _ cn35game.ItemExchangeStore = (*Store)(nil)
+
+// ExchangePlayerItem 单事务：扣 costCount 个 fromKey，发放 1 个 toKey。
+func (s *Store) ExchangePlayerItem(userID, fromKey, toKey string, costCount int) error {
+	if userID == "" || fromKey == "" || toKey == "" || fromKey == toKey || costCount <= 0 {
+		return cn35game.ErrInvalidRequest
+	}
+	return s.withTx(func(tx *sql.Tx) error {
+		var exists int
+		if err := tx.QueryRow(`SELECT count(*) FROM cn35_accounts WHERE user_id=?`, userID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists == 0 {
+			return cn35game.ErrNoAccount
+		}
+		for _, k := range []string{fromKey, toKey} {
+			if err := requireEnabledCatalogItemTx(tx, k); err != nil {
+				return err
+			}
+		}
+		if err := debitItemTx(tx, userID, fromKey, costCount); err != nil {
+			return err
+		}
+		return creditItemTx(tx, userID, toKey, 1)
+	})
+}
+
+// UseItemGrantUnit 单事务：扣 costCount 个 itemKey，入库 1 名指定 unitID 同伴（或满觉转徽章）。
+func (s *Store) UseItemGrantUnit(userID, itemKey string, costCount, unitID, dupCap, compMedal int) (*cn35game.ItemUnitGrantResult, error) {
+	if userID == "" || itemKey == "" || costCount <= 0 || unitID <= 0 {
+		return nil, cn35game.ErrInvalidRequest
+	}
+	if dupCap < 0 {
+		dupCap = 0
+	}
+	var res cn35game.ItemUnitGrantResult
+	res.UnitID = unitID
+	err := s.withTx(func(tx *sql.Tx) error {
+		var exists int
+		if err := tx.QueryRow(`SELECT count(*) FROM cn35_accounts WHERE user_id=?`, userID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists == 0 {
+			return cn35game.ErrNoAccount
+		}
+		if err := requireEnabledCatalogItemTx(tx, itemKey); err != nil {
+			return err
+		}
+		if err := debitItemTx(tx, userID, itemKey, costCount); err != nil {
+			return err
+		}
+		var level, dup int
+		err := tx.QueryRow(`SELECT level, duplicated_count FROM cn35_player_units
+			WHERE user_id=? AND unit_id=?`, userID, unitID).Scan(&level, &dup)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			res.Newcomer = true
+			res.Level = 1
+			res.DupBefore = 0
+			res.DupAfter = 0
+			return settleUnitCopyTx(tx, userID, unitID, 0, true)
+		case err != nil:
+			return err
+		default:
+			res.Newcomer = false
+			res.Level = level
+			res.DupBefore = dup
+			if dup < dupCap {
+				res.DupAfter = dup + 1
+				return settleUnitCopyTx(tx, userID, unitID, 1, false)
+			}
+			res.DupAfter = dup
+			if compMedal > 0 {
+				res.CompensatedMedal = compMedal
+				return creditBalanceTx(tx, userID, "medal", int64(compMedal))
+			}
+			return nil
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// requireEnabledCatalogItemTx 目录项存在且启用；不存在/停用 → ErrItemNotFound，
+// 其它数据库错误原样上抛（不得被误判为"道具不存在"）。
+func requireEnabledCatalogItemTx(tx *sql.Tx, itemKey string) error {
+	var enabled int
+	err := tx.QueryRow(`SELECT enabled FROM cn35_item_catalog WHERE item_key=?`, itemKey).Scan(&enabled)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return cn35game.ErrItemNotFound
+	case err != nil:
+		return err
+	case enabled != 1:
+		return cn35game.ErrItemNotFound
+	}
+	return nil
+}

@@ -153,6 +153,36 @@ type Deps struct {
 	// AdventureClock 登录冒险的判定时钟（LA-09 跨天/时钟对抗向量注入）。
 	// nil 用 time.Now；生产路径不设置。
 	AdventureClock func() time.Time
+	// Fate 命运星盘（艾琳的小屋）读面与转动写面（FATE350-01/02，迁移 0051）。
+	// nil 时 /fate/show 与 /fate/fate_buff_summary 走 requireData 空态。
+	Fate FateStore
+	// FateClock 命运星盘/好友周期判定时钟（测试注入）；nil 时回退 GuildClock / time.Now。
+	FateClock func() time.Time
+	// Friends 好友系统与友情徽章礼物盒读写面（FRIEND350-01/02，迁移 0052）。
+	// nil 时 /friends/* 走 requireData 空态。
+	Friends FriendStore
+
+	// Raid 暴走魔宠活动持久层与配置（M6 迁移 0054）。
+	// nil 时不触发强袭且 /raid_monsters* 保持 requireData 空态。
+	Raid       RaidStore
+	RaidConfig RaidConfig
+	RaidClock  func() time.Time
+	RaidRand   func() float64
+
+	// SpecialScoutClock 每日轮换特殊招募判定时钟（测试注入）；nil 时回退 GuildClock / time.Now。
+	SpecialScoutClock func() time.Time
+	// ItemExchange 契约书/星级信单事务兑换与发卡写面；未设时回退 dep.Items / dep.Accounts 断言。
+	ItemExchange ItemExchangeStore
+
+	// M8 限时活动与周常探险：Events 为区域完成率奖励台账（0056）；nil 时
+	// 读面/战斗照常、完成率奖励不发放。EventWindows 为配置覆盖的活动时间窗
+	// （优先于 serve_event_catalog.json 的 default_window）；EventClock 测试注入。
+	Events       EventStore
+	EventWindows map[int]EventWindow
+	EventClock   func() time.Time
+	// M10 癒术士大赛与公会训练（迁移 0057）。nil 时 /ladders/*、/rob_battles/*
+	// 保持 requireData 空态、日常入口不追加两项横幅。届/周/日判定用 GuildClock。
+	PvP PvPStore
 }
 
 // Register 注册 CN 3.5.0 启动必经路由，返回登记数。
@@ -243,6 +273,12 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 		presetDataHandler(dep))
 	register(http.MethodPost, "/users/preset_data.json",
 		"CN 3.5.0 玩家快照 POST 形态", presetDataHandler(dep))
+	// FateAstrolabePage / RedDiamondShop requireData.user_red_coin 声明 path="/users/preset_data[/]"
+	register(http.MethodGet, "/users/preset_data",
+		"CN 3.5.0 玩家快照无后缀别名（FateAstrolabePage/RedDiamondShop requireData）",
+		presetDataHandler(dep))
+	register(http.MethodPost, "/users/preset_data",
+		"CN 3.5.0 玩家快照无后缀别名 POST 形态", presetDataHandler(dep))
 	register(http.MethodPost, "/users/update",
 		"CN 3.5.0 教程写入（user_name/tutorial_finish，status:success 契约）",
 		usersUpdateHandler(dep))
@@ -296,11 +332,13 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 		adventureHandler(dep))
 	register(http.MethodPost, "/adventure/",
 		"CN 3.5.0 登录冒险 POST 形态", adventureHandler(dep))
-	register(http.MethodGet, "/gachas/choose_attr_page/",
-		"CN 3.5.0 属国抽选页（Home requireData.country_pick_page；空态）",
-		chooseAttrPageHandler(dep))
-	register(http.MethodPost, "/gachas/choose_attr_page/",
-		"CN 3.5.0 属国抽选页 POST 形态", chooseAttrPageHandler(dep))
+	if dep.Gacha == nil {
+		register(http.MethodGet, "/gachas/choose_attr_page/",
+			"CN 3.5.0 属国抽选页（Home requireData.country_pick_page；空态）",
+			chooseAttrPageHandler(dep))
+		register(http.MethodPost, "/gachas/choose_attr_page/",
+			"CN 3.5.0 属国抽选页 POST 形态", chooseAttrPageHandler(dep))
+	}
 
 	// UI-WALKTHROUGH-20260927：主模块入口 requireData 缺口（台账 §4 与
 	// 2026-09-28 实机 501 取证一致）。读面空态集中在 module_requiredata.go。
@@ -316,6 +354,11 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 		presetDataHandler(dep))
 	register(http.MethodPost, "/users/preset_data",
 		"CN 3.5.0 玩家快照裸路径 POST 形态", presetDataHandler(dep))
+	// M8：活动/周常读面必须先于 requireData 空态扫表登记（同路径先注册者生效）。
+	registerEventRoutes(register, dep)
+	if dep.PvP != nil && dep.Catalog != nil {
+		registerPvPRoutes(register, dep)
+	}
 	registerModuleRequireData(register, dep)
 
 	// GUILD350：公会/公会战域。装配 dep.Guild 时注册真实读/写面；
@@ -324,6 +367,10 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 		registerGuildRoutes(register, dep)
 	} else {
 		dep.log().Warn("CN3.5 未装配 Guild（公会域走 requireData 空态）")
+	}
+
+	if dep.Raid != nil {
+		registerRaidRoutes(register, dep)
 	}
 
 	// PLAY350-07 库存读面：会话账号 → InventoryStore 行 × cardcatalog 模板
@@ -414,6 +461,7 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 			gachaReloadDataHandler(dep))
 		register(http.MethodPost, "/users/reload_data",
 			"CN 3.5.0 缓存刷新 POST 形态", gachaReloadDataHandler(dep))
+		registerSpecialScoutRoutes(register, dep)
 	} else {
 		dep.log().Warn("CN3.5 未装配 Gacha（跳过 /gachas/execute 与 /users/reload_data）")
 	}
@@ -448,9 +496,49 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 			unitProtectHandler(dep))
 		register(http.MethodPost, "/user_units/protect",
 			"CN 3.5.0 同伴保护位 POST 形态", unitProtectHandler(dep))
+		register(http.MethodGet, "/user_units/sell",
+			"CN 3.5.0 伙伴出售（?ids[]=，UnitSaleConfirmModal.cs:37）",
+			unitSellHandler(dep))
+		register(http.MethodPost, "/user_units/sell",
+			"CN 3.5.0 伙伴出售 POST 形态", unitSellHandler(dep))
+		register(http.MethodGet, "/user_units/evolution",
+			"CN 3.5.0 伙伴进化（?id=，UnitEvolutionModal.cs:145）",
+			unitEvolutionHandler(dep))
+		register(http.MethodPost, "/user_units/evolution",
+			"CN 3.5.0 伙伴进化 POST 形态", unitEvolutionHandler(dep))
+		register(http.MethodGet, "/unit_ability_exchange/get_unit_ability_exchange_info",
+			"CN 3.5.0 能力互换页信息（ChangeAbilityModal.cs:96）",
+			unitAbilityExchangeInfoHandler(dep))
+		register(http.MethodPost, "/unit_ability_exchange/get_unit_ability_exchange_info",
+			"CN 3.5.0 能力互换页信息 POST 形态", unitAbilityExchangeInfoHandler(dep))
+		register(http.MethodGet, "/unit_ability_exchange/select_unit",
+			"CN 3.5.0 能力互换候选伙伴列表（ChangeAbilityListModal.cs:92）",
+			unitAbilityExchangeSelectHandler(dep))
+		register(http.MethodPost, "/unit_ability_exchange/select_unit",
+			"CN 3.5.0 能力互换候选伙伴列表 POST 形态", unitAbilityExchangeSelectHandler(dep))
+		register(http.MethodGet, "/unit_ability_exchange/get_unit_ability_exchange_result",
+			"CN 3.5.0 能力互换预览（ChangeAbilityListModal.cs:204）",
+			unitAbilityExchangeResultHandler(dep))
+		register(http.MethodPost, "/unit_ability_exchange/get_unit_ability_exchange_result",
+			"CN 3.5.0 能力互换预览 POST 形态", unitAbilityExchangeResultHandler(dep))
+		register(http.MethodGet, "/unit_ability_exchange/exchange_unit_ability",
+			"CN 3.5.0 能力互换执行（ChangeAbilityConfirmModal.cs:143）",
+			unitAbilityExchangeExecHandler(dep))
+		register(http.MethodPost, "/unit_ability_exchange/exchange_unit_ability",
+			"CN 3.5.0 能力互换执行 POST 形态", unitAbilityExchangeExecHandler(dep))
 	} else {
-		dep.log().Warn("CN3.5 未装配 UnitOps（跳过 set_leader/set_helper/protect）")
+		dep.log().Warn("CN3.5 未装配 UnitOps（跳过 set_leader/set_helper/protect/sell/evolution/unit_ability_exchange）")
 	}
+	register(http.MethodGet, "/user_monsters/evolve_select_info",
+		"CN 3.5.0 魔宠进化选择列表（MonsterEvolveModal requireData）",
+		monsterEvolveSelectInfoHandler(dep))
+	register(http.MethodPost, "/user_monsters/evolve_select_info",
+		"CN 3.5.0 魔宠进化选择列表 POST 形态", monsterEvolveSelectInfoHandler(dep))
+	register(http.MethodGet, "/user_monsters/rare_monster_category_config",
+		"CN 3.5.0 融合宠强化档位配置（ScaleCategory_New.cs:67）",
+		rareMonsterCategoryConfigHandler(dep))
+	register(http.MethodPost, "/user_monsters/rare_monster_category_config",
+		"CN 3.5.0 融合宠强化档位配置 POST 形态", rareMonsterCategoryConfigHandler(dep))
 	if dep.MonsterOps != nil {
 		register(http.MethodGet, "/user_monsters/on",
 			"CN 3.5.0 魔宠装备（?uuid=&unit_id=，UserMonsterDetail.cs:390）",
@@ -472,13 +560,33 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 			monsterPowerupHandler(dep))
 		register(http.MethodPost, "/user_monsters/powerup",
 			"CN 3.5.0 魔宠强化 POST 形态", monsterPowerupHandler(dep))
-		register(http.MethodGet, "/user_monsters/evolve_select_info",
-			"CN 3.5.0 魔宠进化选择列表（MonsterEvolveModal requireData）",
-			monsterEvolveSelectInfoHandler(dep))
-		register(http.MethodPost, "/user_monsters/evolve_select_info",
-			"CN 3.5.0 魔宠进化选择列表 POST 形态", monsterEvolveSelectInfoHandler(dep))
+		register(http.MethodGet, "/user_monsters/sell",
+			"CN 3.5.0 魔宠出售（?uuids[]=，MonsterSaleConfirmModal.cs:37）",
+			monsterSellHandler(dep))
+		register(http.MethodPost, "/user_monsters/sell",
+			"CN 3.5.0 魔宠出售 POST 形态", monsterSellHandler(dep))
+		register(http.MethodGet, "/user_monsters/show_evolve_board",
+			"CN 3.5.0 进化之卵融合面板配置（MergeEggModal.cs:370）",
+			monsterShowEvolveBoardHandler(dep))
+		register(http.MethodPost, "/user_monsters/show_evolve_board",
+			"CN 3.5.0 进化之卵融合面板配置 POST 形态", monsterShowEvolveBoardHandler(dep))
+		register(http.MethodGet, "/user_monsters/evolve_egg",
+			"CN 3.5.0 进化之卵融合执行（MergeEggUpModal.cs:375）",
+			monsterEvolveEggHandler(dep))
+		register(http.MethodPost, "/user_monsters/evolve_egg",
+			"CN 3.5.0 进化之卵融合执行 POST 形态", monsterEvolveEggHandler(dep))
+		register(http.MethodGet, "/user_monsters/evolve_monster_select_info",
+			"CN 3.5.0 魔宠融合候选详情（MergeMonsterModal.cs:76）",
+			monsterEvolveMonsterSelectInfoHandler(dep))
+		register(http.MethodPost, "/user_monsters/evolve_monster_select_info",
+			"CN 3.5.0 魔宠融合候选详情 POST 形态", monsterEvolveMonsterSelectInfoHandler(dep))
+		register(http.MethodGet, "/user_monsters/evolve",
+			"CN 3.5.0 魔宠融合执行（MergeMonsteUpModal.cs:379）",
+			monsterEvolveHandler(dep))
+		register(http.MethodPost, "/user_monsters/evolve",
+			"CN 3.5.0 魔宠融合执行 POST 形态", monsterEvolveHandler(dep))
 	} else {
-		dep.log().Warn("CN3.5 未装配 MonsterOps（跳过 on/off/protect/powerup）")
+		dep.log().Warn("CN3.5 未装配 MonsterOps（跳过 on/off/protect/powerup/sell/evolve）")
 	}
 	// /user_monsters/ 前缀兜底：未取证的魔宠写面（sell/evolve 族/
 	// share 等）与未注册子路径一律业务级 modal 拒绝，不再 501。
@@ -585,11 +693,99 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 			redDiamondShopRefreshHandler(dep))
 		register(http.MethodPost, "/red_diamond_shop/refresh",
 			"CN 3.5.0 每日商品手动刷新 POST 形态", redDiamondShopRefreshHandler(dep))
+	}
+	if dep.DailyShop != nil || dep.Fate != nil || dep.PvP != nil {
 		register(http.MethodGet, "/users/function_portal",
-			"CN 3.5.0 主人公日常入口列表（含面包店 banner 跳转）",
+			"CN 3.5.0 主人公日常入口列表（含面包店 banner 跳转与星盘红点）",
 			functionPortalHandler(dep))
 		register(http.MethodPost, "/users/function_portal",
 			"CN 3.5.0 主人公日常入口列表 POST 形态", functionPortalHandler(dep))
+	}
+	// FATE350-02 命运星盘（艾琳的小屋）读面与转动写面。
+	if dep.Fate != nil {
+		register(http.MethodGet, "/fate/show",
+			"CN 3.5.0 命运星盘详情读面（FateAstrolabePage requireData.fate）",
+			fateShowHandler(dep))
+		register(http.MethodPost, "/fate/show",
+			"CN 3.5.0 命运星盘详情读面 POST 形态", fateShowHandler(dep))
+		register(http.MethodGet, "/fate/fate_buff_summary",
+			"CN 3.5.0 日常页星盘加成汇总读面（MainCharaDailyPage requireData.fate_buff_summary）",
+			fateBuffSummaryHandler(dep))
+		register(http.MethodPost, "/fate/fate_buff_summary",
+			"CN 3.5.0 日常页星盘加成汇总读面 POST 形态", fateBuffSummaryHandler(dep))
+		register(http.MethodGet, "/fate/roll",
+			"CN 3.5.0 命运星盘转动写面（?type=all|inner&confirm=false|true）",
+			fateRollHandler(dep))
+		register(http.MethodPost, "/fate/roll",
+			"CN 3.5.0 命运星盘转动写面 POST 形态", fateRollHandler(dep))
+	}
+	// FRIEND350-02 好友系统与友情徽章礼物盒读写面。
+	if dep.Friends != nil {
+		register(http.MethodGet, "/friends/index",
+			"CN 3.5.0 好友列表读面（AddFriendInfos requireData.friends）",
+			friendsIndexHandler(dep))
+		register(http.MethodPost, "/friends/index",
+			"CN 3.5.0 好友列表读面 POST 形态", friendsIndexHandler(dep))
+		register(http.MethodGet, "/friends/friend_apply_list",
+			"CN 3.5.0 好友申请列表读面（AcceptFriend requireData.friends_apply）",
+			friendsApplyListHandler(dep))
+		register(http.MethodPost, "/friends/friend_apply_list",
+			"CN 3.5.0 好友申请列表读面 POST 形态", friendsApplyListHandler(dep))
+		register(http.MethodGet, "/friends/search_friend",
+			"CN 3.5.0 好友搜索（?user_id=&name=）",
+			friendsSearchHandler(dep))
+		register(http.MethodPost, "/friends/search_friend",
+			"CN 3.5.0 好友搜索 POST 形态", friendsSearchHandler(dep))
+		register(http.MethodGet, "/friends/apply_friend",
+			"CN 3.5.0 发送好友申请（?user_id=）",
+			friendsApplyHandler(dep))
+		register(http.MethodPost, "/friends/apply_friend",
+			"CN 3.5.0 发送好友申请 POST 形态", friendsApplyHandler(dep))
+		register(http.MethodGet, "/friends/apply_friend_2",
+			"CN 3.5.0 发送好友申请别名（?user_id=）",
+			friendsApplyHandler(dep))
+		register(http.MethodPost, "/friends/apply_friend_2",
+			"CN 3.5.0 发送好友申请别名 POST 形态", friendsApplyHandler(dep))
+		register(http.MethodGet, "/friends/apply",
+			"CN 3.5.0 玩家主页发送好友申请别名（?id=）",
+			friendsApplyHandler(dep))
+		register(http.MethodPost, "/friends/apply",
+			"CN 3.5.0 玩家主页发送好友申请别名 POST 形态", friendsApplyHandler(dep))
+		register(http.MethodGet, "/friends/add_friend",
+			"CN 3.5.0 批准添加好友（?user_id=）",
+			friendsAddHandler(dep))
+		register(http.MethodPost, "/friends/add_friend",
+			"CN 3.5.0 批准添加好友 POST 形态", friendsAddHandler(dep))
+		register(http.MethodGet, "/friends/delete_friend",
+			"CN 3.5.0 批量解除好友（?user_ids[]=）",
+			friendsDeleteHandler(dep))
+		register(http.MethodPost, "/friends/delete_friend",
+			"CN 3.5.0 批量解除好友 POST 形态", friendsDeleteHandler(dep))
+		register(http.MethodGet, "/friends/clear_apply_list",
+			"CN 3.5.0 清空好友申请列表",
+			friendsClearApplyListHandler(dep))
+		register(http.MethodPost, "/friends/clear_apply_list",
+			"CN 3.5.0 清空好友申请列表 POST 形态", friendsClearApplyListHandler(dep))
+		register(http.MethodGet, "/friends/give_friend_medal",
+			"CN 3.5.0 单人赠送友情徽章（?user_id=）",
+			friendsGiveMedalHandler(dep))
+		register(http.MethodPost, "/friends/give_friend_medal",
+			"CN 3.5.0 单人赠送友情徽章 POST 形态", friendsGiveMedalHandler(dep))
+		register(http.MethodGet, "/friends/give_all_friend_medal",
+			"CN 3.5.0 一键赠送全部好友友情徽章（含 CP 溢出确认）",
+			friendsGiveAllMedalsHandler(dep))
+		register(http.MethodPost, "/friends/give_all_friend_medal",
+			"CN 3.5.0 一键赠送全部好友友情徽章 POST 形态", friendsGiveAllMedalsHandler(dep))
+		register(http.MethodGet, "/friends/show_friend_medal_list",
+			"CN 3.5.0 友情徽章礼物盒读面（AcceptMedalPresent requireData.friend_medal_gifts）",
+			friendsShowMedalListHandler(dep))
+		register(http.MethodPost, "/friends/show_friend_medal_list",
+			"CN 3.5.0 友情徽章礼物盒读面 POST 形态", friendsShowMedalListHandler(dep))
+		register(http.MethodGet, "/friends/acquire_friend_medals",
+			"CN 3.5.0 领取友情徽章礼物（?uuid= 单领 / 无参全领）",
+			friendsAcquireMedalsHandler(dep))
+		register(http.MethodPost, "/friends/acquire_friend_medals",
+			"CN 3.5.0 领取友情徽章礼物 POST 形态", friendsAcquireMedalsHandler(dep))
 	}
 	// LOGIN350-02 不可思议之泉（时间累积）读面与领取写面。
 	if dep.LoginBonus != nil {
@@ -628,6 +824,11 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 			skillSetAllHandler(dep))
 		register(http.MethodPost, "/user_skills/set_all",
 			"CN 3.5.0 符文装备 POST 形态", skillSetAllHandler(dep))
+		register(http.MethodGet, "/user_skills/skills_Set",
+			"CN 3.5.0 符文装备别名（SkillWithUnitListComponent.cs:376）",
+			skillSetAllHandler(dep))
+		register(http.MethodPost, "/user_skills/skills_Set",
+			"CN 3.5.0 符文装备别名 POST 形态", skillSetAllHandler(dep))
 		register(http.MethodGet, "/user_skills/off",
 			"CN 3.5.0 符文卸下（?uuid= 单枚 / ?all=true&unit_id= 全卸下）",
 			skillOffHandler(dep))
@@ -744,6 +945,11 @@ func Register(reg *httpapi.Registry, dep Deps) int {
 		chaptersHandler(dep, storyCat))
 	register(http.MethodPost, "/chapters/",
 		"CN 3.5.0 章节目录 POST 形态", chaptersHandler(dep, storyCat))
+	register(http.MethodGet, "/chapters/list",
+		"CN 3.5.0 章节+故事目录（ChaptersAndStories >=210 路径 requireData.chapters/stories）",
+		chaptersListHandler(dep, storyCat))
+	register(http.MethodPost, "/chapters/list",
+		"CN 3.5.0 章节+故事目录 POST 形态", chaptersListHandler(dep, storyCat))
 	register(http.MethodGet, "/stories/list",
 		"CN 3.5.0 章节故事列表（?chapter_id=N → stories_N；Chapters option 注入）",
 		storiesListHandler(dep, storyCat))

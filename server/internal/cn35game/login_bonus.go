@@ -32,7 +32,11 @@
 package cn35game
 
 import (
+	"crypto/rand"
 	"errors"
+	"fmt"
+	"io"
+	"math/big"
 	"time"
 )
 
@@ -45,7 +49,7 @@ var ErrLoginBonusNotReady = errors.New("cn35game: 不可思议之泉当前没有
 // 故「有量可领」的最短间隔为 1 小时。客户端倒计时也以此为准。
 const SpringIntervalSec int64 = 3600
 
-// SpringRules 泉水产出规则（用户 2026-10-20 给定值，见文件头）。
+// SpringRules 泉水产出规则（用户 2026-10-20 给定值 + 重建随机徽章范围 [5,100]）。
 var SpringRules = struct {
 	GoldPerHour  int64
 	GoldCap      int64
@@ -53,6 +57,8 @@ var SpringRules = struct {
 	GuildCap     int64
 	BPPerHour    int64
 	BPCap        int64
+	MedalMin     int64
+	MedalMax     int64
 	IntervalSec  int64
 }{
 	GoldPerHour:  1000,
@@ -61,7 +67,23 @@ var SpringRules = struct {
 	GuildCap:     48,
 	BPPerHour:    5,
 	BPCap:        120,
+	MedalMin:     5,
+	MedalMax:     100,
 	IntervalSec:  SpringIntervalSec,
+}
+
+// RollSpringMedal 为本次不可思议之泉领取骰出 [5, 100] 闭区间的随机徽章数量。
+// 生产传 nil（默认 crypto/rand.Reader）；测试可注入确定性字节源。
+func RollSpringMedal(r io.Reader) (int64, error) {
+	if r == nil {
+		r = rand.Reader
+	}
+	span := SpringRules.MedalMax - SpringRules.MedalMin + 1
+	n, err := rand.Int(r, big.NewInt(span))
+	if err != nil {
+		return 0, fmt.Errorf("cn35game: 泉水徽章随机失败: %w", err)
+	}
+	return SpringRules.MedalMin + n.Int64(), nil
 }
 
 // SpringState 泉水当前累积状态（读面，不写库）。
@@ -79,6 +101,7 @@ type SpringClaimResult struct {
 	Gold        int64
 	GuildAsset  int64
 	BattlePoint int64
+	Medal       int64
 }
 
 // SpringStore 泉水读/领面（cn35store.Store 实现）。

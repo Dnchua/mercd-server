@@ -84,6 +84,11 @@ func Run(ctx context.Context, cfg config.CN35Config, log *slog.Logger) error {
 	var loginBonus cn35game.SpringStore            // LOGIN350-02：不可思议之泉读/领面（0035）
 	var signin cn35game.SigninStore                // LOGIN350-02：月签到读/领面（0035）
 	var adventure cn35game.AdventureStore          // LOGIN350-03：登录冒险读/发面（0036）
+	var fate cn35game.FateStore                    // FATE350-01：命运星盘读/转面（0051）
+	var friends cn35game.FriendStore               // FRIEND350-01：好友与友情徽章礼盒（0052）
+	var raid cn35game.RaidStore                    // M6：暴走魔宠（0054）
+	var events cn35game.EventStore                 // M8：活动完成率奖励台账（0056）
+	var pvp cn35game.PvPStore                      // M10：癒术士大赛与公会训练（0057）
 	var store *cn35store.Store                     // ROSTER350-03：名册/卡池治理同库
 	if cfg.ListRoutes || cfg.MemMode {
 		accounts, sessions = cn35game.NewMemoryAccounts(), cn35wire.NewMemoryStore()
@@ -119,6 +124,11 @@ func Run(ctx context.Context, cfg config.CN35Config, log *slog.Logger) error {
 		loginBonus = st    // LOGIN350-02：泉水累积/领取台账（0035）
 		signin = st        // LOGIN350-02：月签到台账（0035）
 		adventure = st     // LOGIN350-03：登录冒险轮次/位图/发放台账（0036）
+		fate = st          // FATE350-01：命运星盘状态/转动台账（0051）
+		friends = st       // FRIEND350-01：好友关系/申请/友情徽章礼盒（0052）
+		raid = st          // M6：暴走魔宠活动持久层（0054）
+		events = st        // M8：活动区域完成率奖励台账（0056）
+		pvp = st           // M10：癒术士大赛与公会训练（0057）
 
 		// GUILDLIFE350-13：验收时钟偏移（默认 0）——只影响会战判定 now。
 		if cfg.GuildClockOffset != 0 {
@@ -232,6 +242,10 @@ func Run(ctx context.Context, cfg config.CN35Config, log *slog.Logger) error {
 	if store != nil {
 		unitCatalog = cn35game.NewRosterCatalog(catalog, store)
 	}
+	eventWindows, err := cn35game.ParseEventWindows(cfg.EventWindows)
+	if err != nil {
+		return fmt.Errorf("MERCD35_EVENT_WINDOWS 配置无效: %w", err)
+	}
 	routes := cn35game.Register(reg, cn35game.Deps{
 		Log:             log,
 		Accounts:        accounts,
@@ -266,8 +280,22 @@ func Run(ctx context.Context, cfg config.CN35Config, log *slog.Logger) error {
 		LoginBonus:      loginBonus,
 		Signin:          signin,
 		Adventure:       adventure,
-		GachaConfig:     gachaCfg,
-		RemoteAssets:    remoteAssets,
+		Fate:            fate,
+		Friends:         friends,
+		Raid:            raid,
+		RaidConfig: cn35game.NormalizeRaidConfig(cn35game.RaidConfig{
+			BossMonsterID: cfg.RaidBossMonsterID,
+			TriggerRate:   cfg.RaidTriggerRate,
+			TTLSeconds:    cfg.RaidTTLSeconds,
+			SoloAssist:    cfg.RaidSoloAssist,
+		}),
+		RaidClock:         guildClock,
+		SpecialScoutClock: guildClock,
+		GachaConfig:       gachaCfg,
+		RemoteAssets:      remoteAssets,
+		Events:            events,
+		EventWindows:      eventWindows,
+		PvP:               pvp,
 	})
 	opsDep := ops.OpsDeps{Registry: reg, Started: time.Now(), AssetsDir: cfg.AssetsDir, StateDir: cfg.StateDir, ServerHost: cfg.ServerHost, Log: log}
 	if store != nil {
@@ -346,7 +374,13 @@ func seedGachaRoster(cfg config.CN35Config, st *cn35store.Store, log *slog.Logge
 		// 存量库：memorial 数值配置要件（2026-10-05 口径）生效前已种子化
 		// 的库需要一次性重发成员名单。migrate-* 作者标记保证只补一次，
 		// 管理员后续的草稿/回滚不被重启覆盖。
-		return republishGachaMemorialFilter(st, log)
+		if err := republishGachaMemorialFilter(st, log); err != nil {
+			return err
+		}
+		if err := upgradeGachaScoutDiscount(st, log); err != nil {
+			return err
+		}
+		return addGachaOfficialSampleUnits(st, log)
 	}
 	in, _, err := cn35roster.LoadImport(cfg.AssetsDir, cfg.CardsDir)
 	if err != nil {
@@ -382,13 +416,71 @@ func republishGachaMemorialFilter(st *cn35store.Store, log *slog.Logger) error {
 		return nil
 	}
 	v, done, err := st.RepublishGachaFiltered(gachaMemorialMigrationActor,
-		"memorial 数值配置要件重发（六族素材+unit_memorial 双要件）",
-		cn35game.MemorialUnitConfigured)
+		"行为数值配置要件重发（六族素材+unit_overrides/unit_memorial 双要件）",
+		cn35game.UnitBehaviorConfigured)
 	if err != nil {
 		return fmt.Errorf("memorial 卡池重发失败: %w", err)
 	}
 	if done {
 		log.Info("卡池已按 memorial 数值配置要件重发", "version", v.Version, "digest", v.Digest)
+	}
+	return nil
+}
+
+const gachaScoutDiscountActor = "migrate-0055"
+
+// upgradeGachaScoutDiscount 存量库 migrate-0055 一次性升级：池 "2" 仅在仍为
+// 旧口径 10 连(0 赠) 时改为骑士契约书十连 9 折（9+1），全部池描述做换行转义
+// 归一；只改激活快照与草稿池字段，不连带发布未发布草稿。无论是否有改动都
+// 落 migrate-0055 标记，保证只执行一次。
+func upgradeGachaScoutDiscount(st *cn35store.Store, log *slog.Logger) error {
+	migrated, err := st.GachaMigrationMarkers()
+	if err != nil {
+		return fmt.Errorf("卡池折扣迁移标记读取失败: %w", err)
+	}
+	if migrated[gachaScoutDiscountActor] {
+		return nil
+	}
+	v, done, err := st.UpgradeGachaPool2Discount(gachaScoutDiscountActor,
+		"M7 骑士契约书十连 9 折（9+1）规则升级")
+	if err != nil {
+		return fmt.Errorf("卡池折扣升级失败: %w", err)
+	}
+	if done {
+		log.Info("卡池 migrate-0055 已发布升级版本（池2 9+1 / 描述换行归一）", "version", v.Version, "digest", v.Digest)
+	} else {
+		log.Info("卡池 migrate-0055 激活快照无需升级，已落执行标记")
+	}
+	return nil
+}
+
+const gachaOfficialSampleActor = "migrate-0056"
+
+// addGachaOfficialSampleUnits 存量库 migrate-0056 一次性补入：8 个官方样本
+// 单位（unit_battle_behavior.json unit_overrides）的行为数值在更高优先级层，
+// 修复前的 MemorialUnitConfigured 口径把它们误挡在卡池外。合格者（有模板、
+// resource_ok、wiki 在册、未 blocked）置 enabled 并按稀有度归属追加草稿
+// 成员（weight=1），有新增则发布新版本；无论是否改动都落 migrate-0056
+// 标记，保证只执行一次。新库种子名单按修正后的 UnitBehaviorConfigured
+// 口径天然含这 8 个，本迁移在其上安全成为 no-op。
+func addGachaOfficialSampleUnits(st *cn35store.Store, log *slog.Logger) error {
+	migrated, err := st.GachaMigrationMarkers()
+	if err != nil {
+		return fmt.Errorf("卡池官方样本迁移标记读取失败: %w", err)
+	}
+	if migrated[gachaOfficialSampleActor] {
+		return nil
+	}
+	v, done, err := st.AddGachaOfficialSampleUnits(gachaOfficialSampleActor,
+		"官方样本 8 单位补入卡池（unit_overrides 行为配置视同已配置）",
+		cn35game.OfficialSampleUnitIDs(), cn35game.GachaSeedPoolsForRare)
+	if err != nil {
+		return fmt.Errorf("官方样本单位补入卡池失败: %w", err)
+	}
+	if done {
+		log.Info("卡池 migrate-0056 已发布官方样本补入版本", "version", v.Version, "digest", v.Digest)
+	} else {
+		log.Info("卡池 migrate-0056 无新增成员，已落执行标记")
 	}
 	return nil
 }

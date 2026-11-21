@@ -20,6 +20,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"sync"
@@ -77,6 +78,10 @@ type Store struct {
 	waitColOnce sync.Once
 	hasWaitCol  bool
 
+	// fusionColOnce/hasFusionCol 缓存「0053 魔宠 fusion_degrees 列是否在位」的探测结果。
+	fusionColOnce sync.Once
+	hasFusionCol  bool
+
 	// inflight 写面在途去重表（dedupe.go）。
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
@@ -84,7 +89,13 @@ type Store struct {
 	// tplGen 模板写入代际号：本进程内 cn35_unit_templates 写事务成功提交后
 	// 递增，rosterCatalog 据此重建进程内模板快照（roster.go）。
 	tplGen atomic.Uint64
+
+	// springRand 不可思议之泉徽章随机源（nil 时使用 crypto/rand.Reader）。
+	springRand io.Reader
 }
+
+// SetSpringRandForTest 注入不可思议之泉徽章随机源（仅测试用）。
+func (s *Store) SetSpringRandForTest(r io.Reader) { s.springRand = r }
 
 // Open 打开/升级 CN3.5 运行库；schema 版本不符按迁移器规则失败关闭。
 func Open(path string) (*Store, error) {
@@ -231,7 +242,7 @@ func (s *Store) createAccount(tx *sql.Tx, a *account) (cn35game.LoginResult, err
 	for _, cur := range []struct {
 		name   string
 		amount int64
-	}{{"coin", seedCoin}, {"gacha_point", seedGachaPoint}, {"medal", 0}} {
+	}{{"coin", seedCoin}, {"gacha_point", seedGachaPoint}, {"medal", 0}, {"scout_book_1", 0}} {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO cn35_player_balances
 			(user_id,currency,amount,updated_at) VALUES (?,?,?,?)`,
 			a.userID, cur.name, cur.amount, now); err != nil {
@@ -697,7 +708,14 @@ func (s *Store) Snapshot(userID string) (*cn35game.PlayerSnapshot, error) {
 		"leader_unit_id":    leader,
 		"gacha_point":       balances["gacha_point"],
 		// ITEM350-07：徽章余额同源下发（交易所读 data.user.medal）。
-		"medal":                      balances["medal"],
+		"medal":        balances["medal"],
+		"scout_book_1": balances["scout_book_1"],
+		"scout_books": map[string]any{
+			"1":   balances["scout_book_1"],
+			"99":  balances["scout_book_99"],
+			"100": balances["scout_book_100"],
+			"101": balances["scout_book_101"],
+		},
 		"login_bonus_receivable_sec": springReceivable,
 		"guild_name":                 guild,
 		// 结算条/等级表数据源（SWFQuestClear.cs:709-714 读 user.exp_table/
@@ -732,6 +750,36 @@ func (s *Store) Snapshot(userID string) (*cn35game.PlayerSnapshot, error) {
 		return nil, err
 	}
 	user["powerup_items"] = powerupItems
+	// M5 T07：神秘水晶（evolve_items）与进化之卵（evolve_fancy_items）实时投影。
+	evolveItems := map[string]any{"1": int64(0)}
+	evolveFancyItems := map[string]any{
+		"102": int64(0), "203": int64(0), "301": int64(0), "502": int64(0), "503": int64(0),
+	}
+	evoRows, err := s.db.Query(`SELECT item_key,quantity FROM cn35_player_items
+		WHERE user_id=? AND quantity>0 AND (item_key='evolve_item_1' OR item_key LIKE 'evolve_fancy_item_%')`,
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	for evoRows.Next() {
+		var ikey string
+		var qty int64
+		if err = evoRows.Scan(&ikey, &qty); err != nil {
+			evoRows.Close()
+			return nil, err
+		}
+		if ikey == "evolve_item_1" {
+			evolveItems["1"] = qty
+		} else if strings.HasPrefix(ikey, "evolve_fancy_item_") {
+			eggIDStr := strings.TrimPrefix(ikey, "evolve_fancy_item_")
+			evolveFancyItems[eggIDStr] = qty
+		}
+	}
+	if err = evoRows.Close(); err != nil {
+		return nil, err
+	}
+	user["evolve_items"] = evolveItems
+	user["evolve_fancy_items"] = evolveFancyItems
 	progFields, err := s.questProgressUserFields(userID)
 	if err != nil {
 		return nil, err
@@ -788,6 +836,8 @@ func (s *Store) Snapshot(userID string) (*cn35game.PlayerSnapshot, error) {
 	if tut == 1 {
 		user["game_status"] = 2
 	}
+	// M10（0057）：癒术士大赛次数/药水与公会训练次数投影；无档案时保持协议默认值。
+	s.pvpUserFields(userID, user)
 	cn35game.ApplyDefaultUserWireFields(user, balances)
 	userCoin := map[string]any{"amount": balances["coin"]}
 	cn35game.ApplyDefaultUserCoinWireFields(userCoin)

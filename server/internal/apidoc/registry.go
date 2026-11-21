@@ -58,6 +58,7 @@ func BuildRegistryCN35() (*httpapi.Registry, error) {
 		UnitOps:        docUnitOps{},
 		MonsterOps:     docMonsterOps{},
 		PresentReceive: docPresentReceive{},
+		Raid:           docRaid{},
 	})
 	ops.RegisterOps(reg, ops.OpsDeps{Registry: reg, Started: time.Now(), AssetsDir: assets, StateDir: "server-state-cn35", ServerHost: "apidoc.local:18091", Log: quiet})
 
@@ -75,6 +76,15 @@ func (docUnitOps) SetHelperUnitID(string, int) error        { return errDocStub 
 func (docUnitOps) SetUnitProtected(string, int, bool) error { return errDocStub }
 func (docUnitOps) WaitUnits(string, []int) error            { return errDocStub }
 func (docUnitOps) BackUnits(string, []int) error            { return errDocStub }
+func (docUnitOps) SellUnits(string, []int, map[int]int64) (int64, error) {
+	return 0, errDocStub
+}
+func (docUnitOps) EvolveUnit(string, int, int, int, map[string]int) (cn35game.UnitRecord, cn35game.UnitRecord, error) {
+	return cn35game.UnitRecord{}, cn35game.UnitRecord{}, errDocStub
+}
+func (docUnitOps) ExchangeUnitAbility(string, int, int) (cn35game.UnitRecord, cn35game.UnitRecord, error) {
+	return cn35game.UnitRecord{}, cn35game.UnitRecord{}, errDocStub
+}
 
 type docMonsterOps struct{}
 
@@ -83,6 +93,15 @@ func (docMonsterOps) UnequipMonster(string, string, int) error         { return 
 func (docMonsterOps) SetMonsterProtected(string, []string, bool) error { return errDocStub }
 func (docMonsterOps) MonsterPowerup(string, string, int, int, int) (*cn35game.MonsterPowerupResult, error) {
 	return nil, errDocStub
+}
+func (docMonsterOps) SellMonsters(string, []string, map[string]int64) (int64, error) {
+	return 0, errDocStub
+}
+func (docMonsterOps) EvolveEgg(string, int, int, map[int]bool) (int, []string, error) {
+	return 0, nil, errDocStub
+}
+func (docMonsterOps) EvolveMonster(string, string, []string, int, int, string, int64, int) (cn35game.MonsterRecord, error) {
+	return cn35game.MonsterRecord{}, errDocStub
 }
 
 type docPresentReceive struct{}
@@ -131,6 +150,50 @@ func (docGacha) GachaRecentOperations(string, int) ([]cn35game.GachaOperationRec
 func (docGacha) GachaDraws(string, int64) ([]cn35game.GachaDraw, error) { return nil, errDocStub }
 func (docGacha) SettleGacha(cn35game.GachaSettlement) (*cn35game.GachaOperationRecord, error) {
 	return nil, errDocStub
+}
+
+type docRaid struct{}
+
+func (docRaid) RaidOverview(string, int64) (*cn35game.RaidOverview, error) {
+	return nil, errDocStub
+}
+func (docRaid) RaidHasActive(string, int64) (bool, error) { return false, errDocStub }
+func (docRaid) MaybeSpawnRaidOnQuestClear(string, cn35game.RaidMonsterMeta, cn35game.RaidConfig, float64, int64) (*cn35game.RaidInstance, bool, error) {
+	return nil, false, errDocStub
+}
+func (docRaid) RaidShow(string, string, int64) (*cn35game.RaidDetail, error) {
+	return nil, errDocStub
+}
+func (docRaid) RaidOpenBattle(string, string, string, int, int, int64) (*cn35game.RaidBattleSession, *cn35game.RaidInstance, []cn35game.UnitRecord, []cn35game.MonsterRecord, error) {
+	return nil, nil, nil, nil, errDocStub
+}
+func (docRaid) RaidPayBP(string, string, int64) (*cn35game.RaidBattleSession, error) {
+	return nil, errDocStub
+}
+func (docRaid) RaidReportLose(string, string, int64, cn35game.RaidMonsterMeta, int64) (*cn35game.RaidSettleResult, error) {
+	return nil, errDocStub
+}
+func (docRaid) RaidReportWin(string, string, cn35game.RaidMonsterMeta, int64) (*cn35game.RaidSettleResult, error) {
+	return nil, errDocStub
+}
+func (docRaid) RaidCallHelp(string, string, bool, cn35game.RaidMonsterMeta, int64) (*cn35game.RaidInstance, error) {
+	return nil, errDocStub
+}
+func (docRaid) RaidGiveup(string, string, int64) error { return errDocStub }
+func (docRaid) RaidDamageList(string, string, int64) ([]cn35game.RaidDamageRow, error) {
+	return nil, errDocStub
+}
+func (docRaid) RaidHelpMessages(string, int64) ([]cn35game.RaidHelpMessage, error) {
+	return nil, errDocStub
+}
+func (docRaid) RaidLvClaims(string) (int, map[int]bool, error) {
+	return 0, nil, errDocStub
+}
+func (docRaid) RaidPtShopState(string) (int64, map[string]int, error) {
+	return 0, nil, errDocStub
+}
+func (docRaid) RaidExchangePt(string, string, int, cn35game.RaidPtShopGood, int64) (int64, int, error) {
+	return 0, 0, errDocStub
 }
 
 // docAssets 仅定位固定的 server/assets，不扫描源码或协议说明。
