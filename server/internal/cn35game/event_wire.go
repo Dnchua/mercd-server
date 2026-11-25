@@ -72,36 +72,44 @@ func eventSelectOption(eventID int, areaKey string) map[string]any {
 	}
 }
 
+// eventListRows 组装活动列表行（id/name/release_limit/release_event_select_option）：
+// 时间窗内的当期活动按窗口关时刻，历史活动一律 rolling +365d。
+// eventsHandler 与 stagesHandler 的 "events" 键共用（StageSelectListParts
+// Tab.PastEvent 读 cache "events" 按 EventStageListRow 渲染 event/event_<id>）。
+func eventListRows(dep Deps, ec *eventCatalog, now time.Time) (rows []any, current int) {
+	rows = []any{}
+	if ec == nil {
+		return rows, 0
+	}
+	for i := range ec.Events {
+		ev := &ec.Events[i]
+		w := eventWindow(dep, ev)
+		if !w.Open(now) {
+			continue
+		}
+		current++
+		rows = append(rows, map[string]any{
+			"id": ev.ID, "name": ev.Name, "release_limit": w.CloseAt.Unix(),
+			"release_event_select_option": eventSelectOption(ev.ID, ev.AreaKey),
+		})
+	}
+	rolling := now.Add(365 * 24 * time.Hour).Unix()
+	for _, p := range ec.PastEvents {
+		rows = append(rows, map[string]any{
+			"id": p.ID, "name": p.Name, "release_limit": rolling,
+			"release_event_select_option": eventSelectOption(p.ID, p.AreaKey),
+		})
+	}
+	return rows, current
+}
+
 func eventsHandler(dep Deps) httpapi.Handler {
 	return gameHandler(dep, func(c *httpapi.Ctx, req *cn35wire.GameRequest) ([]byte, error) {
 		ec, err := loadEventCatalog(dep.AssetsDir)
 		if err != nil {
 			return nil, err
 		}
-		now := eventClockNow(dep)
-		rows := []any{}
-		current := 0
-		if ec != nil {
-			for i := range ec.Events {
-				ev := &ec.Events[i]
-				w := eventWindow(dep, ev)
-				if !w.Open(now) {
-					continue
-				}
-				current++
-				rows = append(rows, map[string]any{
-					"id": ev.ID, "name": ev.Name, "release_limit": w.CloseAt.Unix(),
-					"release_event_select_option": eventSelectOption(ev.ID, ev.AreaKey),
-				})
-			}
-			rolling := now.Add(365 * 24 * time.Hour).Unix()
-			for _, p := range ec.PastEvents {
-				rows = append(rows, map[string]any{
-					"id": p.ID, "name": p.Name, "release_limit": rolling,
-					"release_event_select_option": eventSelectOption(p.ID, p.AreaKey),
-				})
-			}
-		}
+		rows, current := eventListRows(dep, ec, eventClockNow(dep))
 		c.Decoded = map[string]any{
 			"cn35": true, "uid": req.UserID, "endpoint": "events",
 			"rows": len(rows), "current": current,

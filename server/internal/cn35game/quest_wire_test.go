@@ -158,10 +158,19 @@ func TestStagesFreshAccount(t *testing.T) {
 	if rd["path"] != "/areas?stage_id=1" {
 		t.Fatalf("requireData.path: %v", rd)
 	}
-	// 其余 tab 键恒发空表（缺键→客户端空 tab）。
-	for _, k := range []string{"hard_mode_stages", "extra_stages", "specials", "events"} {
+	// 其余 tab 键恒发空表（缺键→客户端空 tab）；events 自 2026-11-23 起
+	// 下发与 /events/ 同形的历史活动行（客户端 PastEvent tab 读此键）。
+	for _, k := range []string{"hard_mode_stages", "extra_stages", "specials"} {
 		if l := docList(t, data, k); len(l) != 0 {
 			t.Fatalf("%s 应为空表: %v", k, l)
+		}
+	}
+	for _, ev := range docList(t, data, "events") {
+		row := ev.(map[string]any)
+		for _, k := range []string{"id", "name", "release_limit", "release_event_select_option"} {
+			if _, ok := row[k]; !ok {
+				t.Fatalf("events 行缺键 %s: %v", k, row)
+			}
 		}
 	}
 }

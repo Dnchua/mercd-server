@@ -22,3 +22,5 @@
 - 当前模拟器 `192.168.1.44:16416`（MuMu，x86_64+houdini），宿主机 LAN IP `192.168.1.69`；模式 A 启动：`MERCD_SERVER_HOST=192.168.1.69:18091 MERCD_STATE=<验收副本> ./output/rebuilt/mercd35`（`.env` 中的旧 IP 需用环境变量覆盖）。
 - decoded 树已含 `MainActivity$PocoLoader`（启动 30s 后 `loadLibrary(cn350poco)`），只需把测试桥 `Cn350.Poco.Runtime.dll` 用 `run-as` 拷到 `files/`，Poco 即监听 5001，无需 Frida；首装停在权限页时该加载会崩，授权后重启即可。
 - 服务端：store 事务回调内禁止调用 `dep.Catalog`/任何 Store 方法（单连接 SQLite 会死锁）；execute 文档的 `asset_names` 不得重复（客户端 `textures.Add` 重复键即加载失败）。
+- 战斗下发：客户端 `Unit.OnWalk` 触旗即清波，不等 appear_table 剩余项——Boss/后续出怪不能离末组太远（多波 Boss 关标记 ≤ 末只普通怪 +500ms，`TestStoryMultiWaveBossFollowsLastGroup` 守护）；主线战表改动走 `../../数值维护/experiments/story_encounter_v2.py` → `server/tools/story_catalog_v2_build.py`。
+- 战斗结算后的跳页不得用 `method=Stack`（当前页是已终止的 Quest 页，返回即黑屏）；`/quests/result` 遭遇暴走时不得下发顶层 `next_page_message`（会覆盖 RaidAppearModal 的选择）。

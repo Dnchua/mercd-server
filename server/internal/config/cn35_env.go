@@ -33,6 +33,9 @@ func (c *CN35Config) ApplyCN35Env(fs *flag.FlagSet) error {
 		{"raid-trigger-rate", "MERCD35_RAID_TRIGGER_RATE"},
 		{"raid-ttl-sec", "MERCD35_RAID_TTL_SEC"},
 		{"raid-solo-assist", "MERCD35_RAID_SOLO_ASSIST"},
+		{"battle-dusk-rate", "MERCD35_BATTLE_DUSK_RATE"},
+		{"battle-fever-rate", "MERCD35_BATTLE_FEVER_RATE"},
+		{"battle-time-advance-rate", "MERCD35_BATTLE_TIME_ADVANCE_RATE"},
 		{"event-windows", "MERCD35_EVENT_WINDOWS"},
 	} {
 		if explicit[binding.flag] {

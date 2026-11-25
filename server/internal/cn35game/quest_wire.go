@@ -326,6 +326,13 @@ func (c *questCatalog) validateBattleShape() error {
 					if numOf(em["id"]) <= 0 {
 						return fmt.Errorf("quest %d appear_table.%s.%s id 非法", q.ID, wkey, mkey)
 					}
+				} else {
+					// 无 id 只许 {"type":"boss_appear"} 标记项（story-v2 Boss 关），
+					// 其余无 id 出怪项拒绝。
+					if em["type"] != "boss_appear" || len(em) != 1 {
+						return fmt.Errorf("quest %d appear_table.%s.%s 无 id 且非 boss_appear 标记", q.ID, wkey, mkey)
+					}
+					continue
 				}
 				// 紧凑出怪项（无 params）必须带正数 hp/at——execute 侧
 				// 以此覆盖模板基值，缺省会让 0 面板怪进战斗。
@@ -417,6 +424,10 @@ func stageDoc(s catalogStage) map[string]any {
 		"area_select_message": "name=AreaSelect&method=Stack",
 		"area_select_option": map[string]any{
 			"parts": map[string]any{
+				// 原服 stages 行 parts 补 Header/Background（录播同形：
+				// 页头右侧显 stage 名，背景用选关通用贴图）。
+				"Header":         map[string]any{"title_right_label": s.Name},
+				"Background":     map[string]any{"texture_asset_name": "common/bg-quest_select_fs_128"},
 				"QustAreaSelect": map[string]any{"data_key": fmt.Sprintf("areas_%d", s.ID)},
 			},
 			"requireData": map[string]any{
@@ -660,6 +671,14 @@ func stagesHandler(dep Deps) httpapi.Handler {
 			}
 			return out
 		}
+		// 活动 tab：客户端 StageSelectListParts Tab.PastEvent 读 cache "events"
+		// 并按 EventStageListRow 渲染（event/event_<id> 贴图），行形与
+		// /events/ 端点一致——共用 eventListRows 组装。
+		ec, err := loadEventCatalog(dep.AssetsDir)
+		if err != nil {
+			return nil, err
+		}
+		eventRows, _ := eventListRows(dep, ec, eventClockNow(dep))
 		c.Decoded = map[string]any{
 			"cn35": true, "uid": req.UserID, "endpoint": "stages",
 			"stage_id": prog.StageID, "stages": len(stages),
@@ -669,7 +688,7 @@ func stagesHandler(dep Deps) httpapi.Handler {
 			"hard_mode_stages": hard,
 			"extra_stages":     mkAll(cat.ExtraStages),
 			"specials":         mkAll(cat.Specials),
-			"events":           mkAll(cat.Events),
+			"events":           eventRows,
 		}})
 	})
 }

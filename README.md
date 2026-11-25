@@ -114,6 +114,7 @@ make run       # 加载根目录 .env，前台运行；Ctrl-C 停止
 | `MERCD_REMOTE_ASSETS` | 自备远端资源，模板为 `inputs/files`；应指向直接包含 `area/`、`unit/`、`common/` 等资源子目录的那一层 |
 | `MERCD_REQUEST_LOG` / `MERCD_EVENT_LOG` | 请求／事件记录，默认留空关闭；启用时使用本地路径 |
 | `MERCD35_RAID_BOSS_ID` / `MERCD35_RAID_TRIGGER_RATE` / `MERCD35_RAID_TTL_SEC` / `MERCD35_RAID_SOLO_ASSIST` | 暴走魔宠参数：王宠 ID（默认 `688` 莫鲁菲涅）、探险触发率（默认 `0.5`）、存活秒数（默认 `5400`）、单机模拟协力助战开关（默认 `false`） |
+| `MERCD35_BATTLE_DUSK_RATE` / `MERCD35_BATTLE_FEVER_RATE` / `MERCD35_BATTLE_TIME_ADVANCE_RATE` | 探险战斗时段随机（重建值）：开局黄昏概率（默认 `0.25`，金币/资材 ×1.2）、开局夜晚 Fever Time 概率（默认 `0.10`，×2）、每进入下一波时段推进一档的概率（默认 `0.20`）；三项全为 `0` 时恢复全程白天 |
 | `MERCD35_EVENT_WINDOWS` | M8 当期活动开放时间窗，格式 `44=<RFC3339 开始>/<RFC3339 结束>`，多个活动用 `;` 分隔；默认留空表示关闭，格式错误时启动失败 |
 
 `make run` 与 `server/run.sh` 总是从仓库根运行，相对路径据此解析。直接执行二进制时，相对路径按当前工作目录解析。使用 `-env-file` 或 `MERCD_ENV_FILE` 可选择其他环境文件；未指定时依次探测 `mercd35.env`、`.env`，显式指定的文件不存在则报错。

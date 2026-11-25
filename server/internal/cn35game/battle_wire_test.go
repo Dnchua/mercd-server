@@ -29,6 +29,12 @@ func battleServer(t *testing.T, stateDir string) (*httptest.Server, *cn35store.S
 // （剧情 seed 掉落/随机背景确定性回放：43 首抽 Intn(10000)<200）。
 func battleServerSeed(t *testing.T, stateDir string, randSeed int64) (*httptest.Server, *cn35store.Store) {
 	t.Helper()
+	return battleServerTZ(t, stateDir, randSeed, cn35game.BattleTimezoneConfig{})
+}
+
+// battleServerTZ 同 battleServerSeed，可装配探险时段（朝/夕/夜）随机参数。
+func battleServerTZ(t *testing.T, stateDir string, randSeed int64, tz cn35game.BattleTimezoneConfig) (*httptest.Server, *cn35store.Store) {
+	t.Helper()
 	cat, err := cardcatalog.Load(filepath.Join("..", "..", "assets", "shared", "cards"))
 	if err != nil {
 		t.Fatalf("cardcatalog 加载: %v", err)
@@ -52,7 +58,8 @@ func battleServerSeed(t *testing.T, stateDir string, randSeed int64) (*httptest.
 		AssetsDir:  filepath.Join("..", "..", "assets", "cn350"),
 		// 固定 seed：剧情 seed 掉落（seed0 首次 Intn(10000)=3274 ≥ 200 不掉）
 		// 与随机背景确定化，避免回放测试随概率抖动。
-		BattleRand: mathrand.New(mathrand.NewSource(randSeed)),
+		BattleRand:     mathrand.New(mathrand.NewSource(randSeed)),
+		BattleTimezone: tz,
 	})
 	if n == 0 {
 		t.Fatal("未注册任何路由")
@@ -244,7 +251,8 @@ func TestExecuteContract(t *testing.T) {
 	foundScaled := false
 	for _, ev := range at2 {
 		p := ev.(map[string]any)["params"].(map[string]any)
-		if int(p["hp"].(float64)) == normalHP*18/10 {
+		// story-v2 难度倍率：hard hp_bp=2000（×2）。
+		if int(p["hp"].(float64)) == normalHP*2 {
 			foundScaled = true
 		}
 	}
@@ -549,6 +557,10 @@ func TestStorySeedDropAndBackground(t *testing.T) {
 	for _, wv := range doc["appear_table"].(map[string]any) {
 		for _, ev := range wv.(map[string]any) {
 			e := ev.(map[string]any)
+			// story-v2：{"type":"boss_appear"} 标记项无 id/rewards，跳过。
+			if _, ok := e["id"]; !ok {
+				continue
+			}
 			for _, rv := range e["rewards"].([]any) {
 				r := rv.(map[string]any)
 				if r["key"] == "seed" {
@@ -723,5 +735,57 @@ func TestBattleRestartWire(t *testing.T) {
 	res2 := gameJSON(t, ts2.URL, "/quests/result", uid, sk, s0, s1, "bid="+bid+"&time=30&mc=0", "_method=GET")
 	if res2["status"] != "already_received" {
 		t.Fatalf("重启后重放: %v", res2)
+	}
+}
+
+// TestBossAppearMarkerNoRewards story-v2 一波 Boss 关（quest80）：
+// {"type":"boss_appear"} 标记项不是怪位，奖励注入后仍保持原样、无 rewards；
+// 难度固定奖励（金币/资材）只落在真实怪位（本关即 Boss 项）上。
+func TestBossAppearMarkerNoRewards(t *testing.T) {
+	dir := t.TempDir()
+	ts, st := battleServer(t, dir)
+	defer ts.Close()
+	defer st.Close()
+	uid, sk, s0, s1 := establishSession(t, ts.URL, "dev-b-bossmarker")
+	seedBattleUnits(t, st, uid)
+	if _, err := st.DB().Exec(`UPDATE cn35_quest_progress
+		SET stage_id=5,area_id=20,quest_id=80,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+		WHERE user_id=?`, uid); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := gameJSON(t, ts.URL, "/quests/execute/80.json", uid, sk, s0, s1,
+		"mode=quest&id=80&difficulty_id=normal&party_id=001", "_method=GET")
+	if doc["status"] == "fail" {
+		t.Fatalf("quest80 execute 失败: %v", doc)
+	}
+	wave := doc["appear_table"].(map[string]any)["1"].(map[string]any)
+	marker, ok := wave["2000"].(map[string]any)
+	if !ok || len(marker) != 1 || marker["type"] != "boss_appear" {
+		t.Fatalf("2000 应为纯 boss_appear 标记项: %v", wave)
+	}
+	// 奖励只出现在带 id 的怪位（本关单 Boss 项必须挂到 gacha_point）。
+	var bossEntry map[string]any
+	for msk, ev := range wave {
+		e := ev.(map[string]any)
+		if _, hasID := e["id"]; !hasID {
+			if _, has := e["rewards"]; has {
+				t.Fatalf("标记项 %s 不应挂 rewards: %v", msk, e)
+			}
+			continue
+		}
+		bossEntry = e
+	}
+	if bossEntry == nil {
+		t.Fatalf("wave1 无 Boss 怪位: %v", wave)
+	}
+	foundGold := false
+	for _, rv := range bossEntry["rewards"].([]any) {
+		if rv.(map[string]any)["key"] == "gacha_point" {
+			foundGold = true
+		}
+	}
+	if !foundGold {
+		t.Fatalf("难度固定金币奖励应落在 Boss 怪位: %v", bossEntry)
 	}
 }

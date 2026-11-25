@@ -101,6 +101,12 @@ func materializeAppearTable(b *catalogBattle, prof battleDifficultyProfile,
 			for k, v := range em {
 				cp[k] = v
 			}
+			if _, hasID := em["id"]; !hasID {
+				// {"type":"boss_appear"} 标记项（story-v2 主线 Boss 关形状）：
+				// 不是魔宠出怪，原样透传，不合成 params、不查 cardcatalog。
+				nw[mkey] = cp
+				continue
+			}
 			mid := int(numOf(em["id"]))
 			params, hasParams := em["params"].(map[string]any)
 			if !hasParams {
@@ -214,6 +220,8 @@ func appearTableWithSeedReward(table map[string]any, r BattleReward) map[string]
 
 // pickBattleBackground 每次开战从 background_pool 摇一个套件 id；
 // 空池退回 quest.BackgroundID，仍为空退 1（background1_1 恒存在）。
+// 2026-11-23：story-v2 主线已改回原服固定背景（background_id 逐关下发，
+// 不再写 background_pool），随机池只剩资源本等仍配置的关卡使用。
 func pickBattleBackground(q *catalogQuest, rnd *mathrand.Rand) int {
 	if len(q.BackgroundPool) > 0 {
 		return q.BackgroundPool[rnd.Intn(len(q.BackgroundPool))]

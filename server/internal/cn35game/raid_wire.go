@@ -156,7 +156,10 @@ func raidAppearDoc(r *RaidInstance, now int64) map[string]any {
 	doc["id"] = r.RaidID
 	doc["message"] = fmt.Sprintf("Lv.%d %s 突然出现！\n是否立即前往击退？", r.Level, r.MonsterName)
 	doc["giveup_confirm"] = "确定要放走当前遭遇的暴走魔宠吗？\n放走后将无法获得击退奖励。"
-	doc["next_page_message"] = "name=Raid&base=Common/Pages/Raid&method=Stack"
+	// 不带 method=Stack：此时当前页是已 TerminateQuest 的剧情战斗页，Stack 会把
+	// 它留作暴走页的 parentPage——返回即回到死页黑屏；实机请求日志另见 3 次
+	// 「遭遇弹窗直进暴走→出击」后均无 result/lose 上报（经 Show 重进则正常结算）。
+	doc["next_page_message"] = "name=Raid&base=Common/Pages/Raid"
 	return doc
 }
 

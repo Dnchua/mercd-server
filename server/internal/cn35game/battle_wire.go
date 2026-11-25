@@ -295,6 +295,23 @@ func questExecuteHandler(dep Deps) httpapi.Handler {
 			configVersion = cat.version
 		}
 		bgID := pickBattleBackground(quest, rnd)
+		// 时段/Fever：最后摇（不扰动既有掉落摇奖序列）；金币/资材按波次
+		// 时段倍率重写进 appear_table 与会话快照，展示与入账同口径。
+		// fixed/rolled 注入末波（appearTableWithRewards），按末波时段缩放。
+		tzTable := rollBattleTimezones(dep.BattleTimezone, appearTable, rnd)
+		if len(tzTable) > 0 {
+			waves := sortedWaveKeys(appearTable)
+			lastTZ := timezoneOf(tzTable, waves[len(waves)-1])
+			appearTable = appearTableWithTimezoneRewards(appearTable, tzTable)
+			fixed = timezoneScaledRewards(fixed, lastTZ)
+			rolled = timezoneScaledRewards(rolled, lastTZ)
+			rewards = AggregateRewards(appearTable)
+			if seedReward != nil {
+				rewards = append(rewards, *seedReward)
+			}
+			rewards = append(append(rewards, fixed...), rolled...)
+			c.Decoded["timezone_table"] = tzTable
+		}
 		sess := &BattleSession{
 			BattleID: newBattleID(), UserID: req.UserID,
 			QuestID: quest.ID, AreaID: battleSessionAreaID(quest), Difficulty: diff,
@@ -344,7 +361,7 @@ func questExecuteHandler(dep Deps) httpapi.Handler {
 		appearTable = appearTableWithRuneDrops(appearTable, sess.RuneDrops)
 		doc, err := buildExecuteDoc(dep, cat.questCatalog, quest, diff, sess,
 			records, seeds, snap, prog, appearTable,
-			append(append([]BattleReward{}, fixed...), rolled...), seedReward, bgID)
+			append(append([]BattleReward{}, fixed...), rolled...), seedReward, bgID, tzTable)
 		if err != nil {
 			return nil, err
 		}
@@ -357,7 +374,7 @@ func questExecuteHandler(dep Deps) httpapi.Handler {
 func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 	diff string, sess *BattleSession, records []UnitRecord, seeds []MonsterRecord,
 	snap *PlayerSnapshot, prog *QuestProgress, appearTable map[string]any,
-	injected []BattleReward, seedReward *BattleReward, bgID int) (map[string]any, error) {
+	injected []BattleReward, seedReward *BattleReward, bgID int, tzTable map[string]int) (map[string]any, error) {
 	battle := quest.Battle
 	// injected（难度固定奖励 + 资源副本摇中掉落）注入 appear_table 供客户端
 	// 掉落/结算展示；注入在材质化副本上进行，不污染目录对象
@@ -513,17 +530,23 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 			fmt.Sprintf("monster/monster_btn_%d", m.MonsterID),
 			fmt.Sprintf("monster/monster_large_ns_%d", m.MonsterID))
 	}
-	assets = append(assets,
-		fmt.Sprintf("background/background%d_1", bgID),
-		battleBgm(cat, battle))
-	assets = append(assets, battle.AssetNamesExtra...)
-	// help/timezone：无 NPC 援军，按波次发空表/默认时区。
+	// help/timezone：无 NPC 援军，按波次发空表；时段按开战摇定（未启用全为白天）。
+	// 背景按出现过的时段逐一声明 background<id>_<tz>（原服 execute 同形：
+	// 客户端按 timezone_table 值决定加载哪些背景包）。
 	helpTable := map[string]any{}
 	timezone := map[string]any{}
-	for wkey := range appearTable {
+	declaredTZ := map[int]bool{}
+	for _, wkey := range sortedWaveKeys(appearTable) {
+		tz := timezoneOf(tzTable, wkey)
 		helpTable[wkey] = map[string]any{}
-		timezone[wkey] = 1
+		timezone[wkey] = tz
+		if !declaredTZ[tz] {
+			declaredTZ[tz] = true
+			assets = append(assets, fmt.Sprintf("background/background%d_%d", bgID, tz))
+		}
 	}
+	assets = append(assets, battleBgm(cat, battle))
+	assets = append(assets, battle.AssetNamesExtra...)
 	bgm := battleBgm(cat, battle)
 	bid := sess.BattleID
 	userDoc := map[string]any{}
@@ -544,8 +567,11 @@ func buildExecuteDoc(dep Deps, cat *questCatalog, quest *catalogQuest,
 		"appear_table":   appearTable,
 		"help_table":     helpTable,
 		"timezone_table": timezone,
-		"asset_names":    assets,
-		"bgm_name":       bgm,
+		// rush_started：本场含夜晚波（Fever Time），客户端进入夜晚波挂 fever 粒子。
+		"rush_started": hasNightWave(tzTable),
+		"rush_ended":   false,
+		"asset_names":  assets,
+		"bgm_name":     bgm,
 		// exp 必须发会话口径（难度 profile ×收益符文加成），与结算
 		// 入账一致；此前发 battle.Exp 基值导致困难/极难结算屏显示
 		// 经验低于实收。
@@ -754,7 +780,11 @@ func appearTableWithRewards(appearTable map[string]any, rolled []BattleReward) m
 	if waveMap == nil {
 		return appearTable
 	}
-	for skey := range waveMap {
+	for skey, ev := range waveMap {
+		// 无 id 的 {"type":"boss_appear"} 标记项不是怪位，不挂奖励。
+		if em, ok := ev.(map[string]any); ok && numOf(em["id"]) <= 0 {
+			continue
+		}
 		if n, err := strconv.Atoi(skey); err == nil {
 			slots = append(slots, n)
 		}
@@ -982,6 +1012,7 @@ func questResultHandler(dep Deps) httpapi.Handler {
 			}
 		}
 		nextPage := resultNextPage(dep, res.Session)
+		raidSpawned := false
 		if res.Session != nil && res.Session.APCost > 0 && dep.Raid != nil {
 			now := raidWireNow(dep)
 			if inst, spawned, rerr := dep.Raid.MaybeSpawnRaidOnQuestClear(
@@ -994,18 +1025,24 @@ func questResultHandler(dep Deps) httpapi.Handler {
 				}
 				data["raid_monster"] = raidAppearDoc(inst, now)
 				c.Decoded["raid_spawned_id"] = inst.RaidID
-				nextPage = "name=Raid&base=Common/Pages/Raid&method=Stack"
+				raidSpawned = true
 			}
 		}
 		c.Decoded["clear_count"] = res.ClearCount
 		out := map[string]any{
-			"status":            "success",
-			"data":              data,
-			"next_page_message": nextPage,
+			"status": "success",
+			"data":   data,
 			// 结算屏展示键（SWFQuestClear.cs:381-407 已证消费）：
 			// spend_time 回显客户端上行的战斗秒数。total_gp/message
 			// 等暂无真值来源的键不下发（客户端有键才渲染对应行）。
 			"spend_time": int(rep.Time),
+		}
+		// 遭遇暴走时不下发顶层 next_page_message（mlk 原服 /quests/result 均无此键）：
+		// Quest.GoNextPage 以结算回包的该键覆盖 RaidAppearModal 写入的
+		// quest.nextPageMessage，下发即令「放走」也跳暴走页、「前往击退」的
+		// 选择失效；缺键时回落 execute 的 next_page_message（同 resultNextPage）。
+		if !raidSpawned {
+			out["next_page_message"] = nextPage
 		}
 		if rateReward != nil {
 			out["progress_rate_reward_message"] = rateReward

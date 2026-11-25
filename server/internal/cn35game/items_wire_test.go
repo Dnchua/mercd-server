@@ -207,16 +207,16 @@ func TestResourceQuestsDoNotAdvanceStory(t *testing.T) {
 	defer st.Close()
 	uid, sk, s0, s1 := establishSession(t, ts.URL, "dev-res-progress")
 	seedBattleUnits(t, st, uid)
-	// 剧情末关为 quest160（stage10/area40，地方=stage、子区域=area）；
+	// 剧情末关为 quest1388（story-v2 原服目录 stage27/area108）；
 	// 结算后无下一关，前沿保持。
 	if _, err := st.DB().Exec(`UPDATE cn35_quest_progress
-		SET stage_id=10,area_id=40,quest_id=160,updated_at=? WHERE user_id=?`,
+		SET stage_id=27,area_id=108,quest_id=1388,updated_at=? WHERE user_id=?`,
 		"2026-09-30T00:00:00Z", uid); err != nil {
 		t.Fatal(err)
 	}
 
-	doc := gameJSON(t, ts.URL, "/quests/execute/160.json", uid, sk, s0, s1,
-		"mode=quest&id=160&difficulty_id=normal&party_id=001&unit_ids=336,348", "_method=GET")
+	doc := gameJSON(t, ts.URL, "/quests/execute/1388.json", uid, sk, s0, s1,
+		"mode=quest&id=1388&difficulty_id=normal&party_id=001&unit_ids=336,348", "_method=GET")
 	if doc["status"] == "fail" {
 		t.Fatalf("剧情末关 execute 失败: %v", doc)
 	}
@@ -233,7 +233,7 @@ func TestResourceQuestsDoNotAdvanceStory(t *testing.T) {
 		Scan(&stageID, &areaID, &questID); err != nil {
 		t.Fatal(err)
 	}
-	if questID != 160 || areaID != 40 || stageID != 10 {
+	if questID != 1388 || areaID != 108 || stageID != 27 {
 		t.Fatalf("剧情进度被资源关污染: stage=%d area=%d quest=%d", stageID, areaID, questID)
 	}
 	var ledger int

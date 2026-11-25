@@ -129,6 +129,8 @@ type Deps struct {
 	// nil 时每次开战新建加密种子 mathrand（newDropRand）；测试可注入
 	// 固定 seed 的 *mathrand.Rand 使掉落判定确定。
 	BattleRand *mathrand.Rand
+	// BattleTimezone 探险战斗朝/夕/夜（Fever Time）随机参数；零值=全程白天。
+	BattleTimezone BattleTimezoneConfig
 	// Guild 公会/公会战域读写面（GUILD350-02..08，迁移 0027）。
 	// nil 时公会相关 requireData 键走 sweep 空态。
 	Guild GuildStore

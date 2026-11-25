@@ -77,6 +77,15 @@ rm -rf "$SINGLE"
 cp -Rc "$DECODED" "$SINGLE" 2>/dev/null || cp -R "$DECODED" "$SINGLE"
 python3 "$SERVER/../client/standalone_manifest.py" "$SINGLE/AndroidManifest.xml"
 cp -Rf "$REMOTE/." "$SINGLE/assets/unity/"
+# 不同逻辑名共用同一内部归档名（CAB）的 bundle 会让 Unity 4 并发加载报
+# "A file of the same name is already loaded" → 「图片下载失败」；
+# 与内置表不一致的冲突件原地改名为 CAB-<basename>。
+(
+    cd "$SERVER"
+    go run ./cmd/mercdb cn35-normalize-bundles \
+        -cabs "$SERVER/assets/cn350/embedded_bundle_cabs.json" \
+        "$SINGLE/assets/unity"
+)
 python3 "$SERVER/../client/merge_asset_manifest.py" "$SINGLE"
 echo "=> ${SINGLE} (资源已并入 assets/unity，5 字段无 MD5 清单直读 StreamingAssets)"
 echo "完成，接下来跑 CLIENT_SOURCE_DIR=client/decoded-single client/build.sh --sign"

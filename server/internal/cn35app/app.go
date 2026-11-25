@@ -289,6 +289,11 @@ func Run(ctx context.Context, cfg config.CN35Config, log *slog.Logger) error {
 			TTLSeconds:    cfg.RaidTTLSeconds,
 			SoloAssist:    cfg.RaidSoloAssist,
 		}),
+		BattleTimezone: cn35game.NormalizeBattleTimezoneConfig(cn35game.BattleTimezoneConfig{
+			DuskRate:    cfg.BattleDuskRate,
+			NightRate:   cfg.BattleFeverRate,
+			AdvanceRate: cfg.BattleTimeAdvance,
+		}),
 		RaidClock:         guildClock,
 		SpecialScoutClock: guildClock,
 		GachaConfig:       gachaCfg,

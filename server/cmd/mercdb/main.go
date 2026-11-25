@@ -41,6 +41,13 @@ func run() error {
 	if len(os.Args) > 1 && os.Args[1] == "cn35-seed-db" {
 		return cn35SeedDB(os.Args[2:])
 	}
+	// bundle CAB 名治理：内置表生成 + 单 APK 合并目录原地规范化。
+	if len(os.Args) > 1 && os.Args[1] == "cn35-embedded-cabs" {
+		return cn35EmbeddedCabs(os.Args[2:])
+	}
+	if len(os.Args) > 1 && os.Args[1] == "cn35-normalize-bundles" {
+		return cn35NormalizeBundles(os.Args[2:])
+	}
 	fs := flag.NewFlagSet("mercdb", flag.ContinueOnError)
 	name := fs.String("name", "", "new migration name (lowercase snake_case)")
 	dir := fs.String("dir", "internal/database/migrations", "SQL source directory for new")

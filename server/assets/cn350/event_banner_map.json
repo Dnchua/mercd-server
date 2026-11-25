@@ -1,0 +1,178 @@
+{
+ "_doc": "历史/当期活动 event/event_<id> 贴图来源映射（tools/build_event_banners.py 按此复制 inputs/files 源 bundle 为 inputs/files/event/event_<id>.Android.unity3d；inputs/ 不入库）。",
+ "_provenance": "专属宣传图为 CN3.5 包内 common/banner_event_<日期>（origin）；区域图/通用公告图为重建替代。",
+ "map": {
+  "44": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "1": {
+   "source": "area/area_4004",
+   "level": "区域图替代(重建)"
+  },
+  "2": {
+   "source": "area/area_4008",
+   "level": "区域图替代(重建)"
+  },
+  "3": {
+   "source": "area/area_4012",
+   "level": "区域图替代(重建)"
+  },
+  "5": {
+   "source": "area/area_4020",
+   "level": "区域图替代(重建)"
+  },
+  "6": {
+   "source": "area/area_4024",
+   "level": "区域图替代(重建)"
+  },
+  "7": {
+   "source": "area/area_4028",
+   "level": "区域图替代(重建)"
+  },
+  "8": {
+   "source": "area/area_4032",
+   "level": "区域图替代(重建)"
+  },
+  "10": {
+   "source": "area/area_4040",
+   "level": "区域图替代(重建)"
+  },
+  "11": {
+   "source": "area/area_4044",
+   "level": "区域图替代(重建)"
+  },
+  "13": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "14": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "15": {
+   "source": "area/area_4060",
+   "level": "区域图替代(重建)"
+  },
+  "16": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "25": {
+   "source": "area/area_4100",
+   "level": "区域图替代(重建)"
+  },
+  "100000": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "100004": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "100005": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "100008": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "100011": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "100013": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "17": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "100015": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "19": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "100016": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "20": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "100017": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "21": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "23": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "100018": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "26": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "100019": {
+   "source": "common/banner_event_171012",
+   "level": "通用公告图替代(重建)"
+  },
+  "27": {
+   "source": "common/banner_event_160818",
+   "level": "包内专属宣传图"
+  },
+  "29": {
+   "source": "common/banner_event_160908",
+   "level": "包内专属宣传图"
+  },
+  "30": {
+   "source": "common/banner_event_160929",
+   "level": "包内专属宣传图"
+  },
+  "31": {
+   "source": "common/banner_event_161110",
+   "level": "包内专属宣传图"
+  },
+  "33": {
+   "source": "common/banner_event_161208",
+   "level": "包内专属宣传图"
+  },
+  "34": {
+   "source": "common/banner_event_170105",
+   "level": "包内专属宣传图"
+  },
+  "36": {
+   "source": "common/banner_event_170309",
+   "level": "包内专属宣传图"
+  },
+  "37": {
+   "source": "common/banner_event_170406",
+   "level": "包内专属宣传图"
+  },
+  "38": {
+   "source": "common/banner_event_170504",
+   "level": "包内专属宣传图"
+  },
+  "39": {
+   "source": "common/banner_event_170629",
+   "level": "包内专属宣传图"
+  },
+  "40": {
+   "source": "common/banner_event_170803",
+   "level": "包内专属宣传图"
+  }
+ }
+}

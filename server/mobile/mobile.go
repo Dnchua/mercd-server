@@ -70,6 +70,10 @@ func Start(stateDir, assetsDir, cardsDir string, port int) error {
 		RaidTriggerRate:   0.5,
 		RaidTTLSeconds:    5400,
 		RaidSoloAssist:    false,
+		// 探险时段随机默认值（与 BindCN35 默认口径一致）。
+		BattleDuskRate:    0.25,
+		BattleFeverRate:   0.10,
+		BattleTimeAdvance: 0.20,
 		// 移动端默认关取证落盘与周期扫描、不开管理面（无令牌即 503）。
 		RequestLog:       "",
 		EventLog:         "",

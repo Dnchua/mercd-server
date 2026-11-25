@@ -30,11 +30,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Dnchua/mercd-server/server/internal/unitybundle"
 )
 
 // assetType CN3.5 客户端 AssetType 表项（server/tools/cn350_assets.py
@@ -139,6 +142,13 @@ type fileHash struct {
 	sha256 string
 }
 
+// remoteCand 一次扫描收集到的候选文件。
+type remoteCand struct {
+	rel  string // 相对远端目录，/ 分隔
+	name string // 逻辑名（去 .Android.unity3d）
+	obs  fileObs
+}
+
 // RemoteEntry 一条稳定且通过校验、参与清单叠加的远端资源。
 type RemoteEntry struct {
 	Name             string `json:"name"` // 逻辑名（unit/unit_414）
@@ -147,7 +157,9 @@ type RemoteEntry struct {
 	MD5              string `json:"md5"`
 	SHA256           string `json:"sha256"`
 	TypeIdx          int    `json:"type_idx"`
-	ReplacesEmbedded bool   `json:"replaces_embedded"` // 覆盖了基线清单同名行
+	ReplacesEmbedded bool   `json:"replaces_embedded"`  // 覆盖了基线清单同名行
+	OrigCAB          string `json:"orig_cab,omitempty"` // 原内部归档名（CAB 冲突改名时记录）
+	CAB              string `json:"cab,omitempty"`      // 下发文件的内部归档名
 }
 
 // RemotePending 观察中尚未稳定（可能仍在解压）的候选文件。
@@ -193,6 +205,8 @@ type RemoteAssets struct {
 	log       *slog.Logger
 	dir       string // 远端资源目录（运营者投放点）
 	baseFile  string // 基线清单（AssetsDir/serve_asset_info_android4_v2_short.txt）
+	cabsFile  string // APK 内置 bundle CAB 表（AssetsDir/embedded_bundle_cabs.json）
+	normDir   string // StateDir/remote_assets_normalized（改名后交付文件）
 	stateFile string // StateDir/remote_assets_state.json
 
 	now       func() time.Time // 可注入时钟（测试）
@@ -203,6 +217,7 @@ type RemoteAssets struct {
 	scanned  bool
 	observed map[string]fileObs  // rel 路径 → 上次扫描观察（稳定性判定）
 	hashes   map[string]fileHash // rel|size|mtime → 哈希缓存
+	cabs     map[string][]string // rel|size|mtime → 内部归档名缓存
 }
 
 // NewRemoteAssets 创建管理器（不做首次扫描；调用方 Scan 一次后再服务）。
@@ -215,11 +230,14 @@ func NewRemoteAssets(dir, assetsDir, stateDir string, log *slog.Logger) *RemoteA
 		log:       log,
 		dir:       dir,
 		baseFile:  filepath.Join(assetsDir, assetInfoFile),
+		cabsFile:  filepath.Join(assetsDir, "embedded_bundle_cabs.json"),
+		normDir:   filepath.Join(stateDir, "remote_assets_normalized"),
 		stateFile: filepath.Join(stateDir, "remote_assets_state.json"),
 		now:       time.Now,
 		stableAge: 10 * time.Second,
 		observed:  make(map[string]fileObs),
 		hashes:    make(map[string]fileHash),
+		cabs:      make(map[string][]string),
 	}
 }
 
@@ -277,14 +295,10 @@ func (m *RemoteAssets) Scanned() bool {
 // Scan 执行一轮 扫描→校验→渲染→版本持久化，成功后整份替换快照。
 // 任何一步失败保留旧快照并返回错误（调用方记日志）。
 func (m *RemoteAssets) Scan() error {
+	scanStart := time.Now()
 	now := m.now()
 	// 1) 遍历远端目录收集候选（非 *.Android.unity3d 静默忽略）。
-	type cand struct {
-		rel  string // 相对远端目录，/ 分隔
-		name string // 逻辑名（去 .Android.unity3d）
-		obs  fileObs
-	}
-	var cands []cand
+	var cands []remoteCand
 	seen := make(map[string]bool)
 	walkErr := filepath.Walk(m.dir, func(p string, fi os.FileInfo, err error) error {
 		if err != nil {
@@ -307,7 +321,7 @@ func (m *RemoteAssets) Scan() error {
 		}
 		obs := fileObs{size: fi.Size(), mtimeUnix: fi.ModTime().UnixNano()}
 		seen[rel] = true
-		cands = append(cands, cand{rel: rel, name: mm[1], obs: obs})
+		cands = append(cands, remoteCand{rel: rel, name: mm[1], obs: obs})
 		return nil
 	})
 	if walkErr != nil && !os.IsNotExist(walkErr) {
@@ -316,6 +330,7 @@ func (m *RemoteAssets) Scan() error {
 
 	// 2) 稳定性 + 校验。
 	entries := make(map[string]RemoteEntry)
+	candByName := make(map[string]remoteCand) // 逻辑名 → 候选（CAB 规范化用）
 	var pending []RemotePending
 	var rejected []RemoteReject
 	for _, cd := range cands {
@@ -344,7 +359,13 @@ func (m *RemoteAssets) Scan() error {
 			Name: cd.name, File: full, Size: cd.obs.size,
 			MD5: h.md5, SHA256: h.sha256, TypeIdx: idx,
 		}
+		candByName[cd.name] = cd
 	}
+	// 2.5) CAB 名冲突规范化：不同逻辑名共用同一内部归档名的远端 bundle
+	// 改名后写入 StateDir/remote_assets_normalized，条目改指规范化文件。
+	cabRenamed, cabDur, cabRejects := m.normalizeCABs(entries, candByName)
+	rejected = append(rejected, cabRejects...)
+
 	// 清理已消失文件的观察记录，避免 map 无限增长。
 	for rel := range m.observed {
 		if !seen[rel] {
@@ -462,8 +483,210 @@ func (m *RemoteAssets) Scan() error {
 	m.log.Info("远端资源扫描完成", "dir", m.dir,
 		"entries", len(entries), "pending", len(pending),
 		"rejected", len(rejected), "asset_info_version", effVer,
-		"base_version", baseVer)
+		"base_version", baseVer,
+		"cab_renamed", cabRenamed, "cab_ms", cabDur.Milliseconds(),
+		"scan_ms", time.Since(scanStart).Milliseconds())
 	return nil
+}
+
+// normSidecar 规范化文件旁的缓存凭据：源 sha256 + 改名表命中即复用。
+type normSidecar struct {
+	SrcSHA256 string            `json:"src_sha256"`
+	Renames   map[string]string `json:"renames"`
+}
+
+// normalizeCABs 对 entries 做 CAB 名冲突判定并改写需改名条目的交付文件。
+// 返回（改名数, 耗时, 追加的 rejected）。
+func (m *RemoteAssets) normalizeCABs(entries map[string]RemoteEntry, candByName map[string]remoteCand) (int, time.Duration, []RemoteReject) {
+	start := time.Now()
+	embedded := make(map[string][]string)
+	if raw, err := os.ReadFile(m.cabsFile); err == nil {
+		if jerr := json.Unmarshal(raw, &embedded); jerr != nil {
+			m.log.Warn("内置 CAB 表解析失败，仅做远端内部判定", "file", m.cabsFile, "err", jerr)
+			embedded = nil
+		}
+	} else {
+		m.log.Warn("内置 CAB 表缺失，仅做远端内部判定", "file", m.cabsFile)
+	}
+
+	remote := make(map[string][]string, len(entries))
+	for name, e := range entries {
+		cd := candByName[name]
+		cabs, reason := m.cabNamesFor(e.File, cd.rel, cd.obs)
+		if reason != "" {
+			// 目录解析失败的条目不参与判定，保留原文件下发
+			// （魔数校验已通过；与历史行为一致）。
+			m.log.Warn("远端资源 CAB 目录解析失败，按原名下发",
+				"file", cd.rel, "reason", reason)
+			continue
+		}
+		remote[name] = cabs
+	}
+	plan := unitybundle.PlanCABRenames(embedded, remote)
+	if len(plan) == 0 {
+		return 0, time.Since(start), nil
+	}
+
+	// 并行改名：worker 只产出规范化文件，主 goroutine 串行改 entries。
+	type job struct {
+		name    string
+		rel     string
+		src     string
+		srcSHA  string
+		renames map[string]string
+	}
+	type result struct {
+		name   string
+		file   string
+		reject RemoteReject
+	}
+	names := make([]string, 0, len(plan))
+	for n := range plan {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	jobs := make(chan job)
+	results := make(chan result, len(names))
+	workers := runtime.NumCPU()
+	if workers > len(names) {
+		workers = len(names)
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				normPath := filepath.Join(m.normDir, filepath.FromSlash(j.rel))
+				res := result{name: j.name, file: normPath}
+				if !m.normCacheHit(normPath, j.srcSHA, j.renames) {
+					if err := m.writeNormalized(normPath, j.src, j.srcSHA, j.renames); err != nil {
+						res.file = ""
+						res.reject = RemoteReject{File: j.rel,
+							Reason: "CAB 改名失败: " + err.Error()}
+					}
+				}
+				results <- res
+			}
+		}()
+	}
+	for _, n := range names {
+		cd := candByName[n]
+		jobs <- job{name: n, rel: cd.rel, src: entries[n].File,
+			srcSHA: entries[n].SHA256, renames: plan[n]}
+	}
+	close(jobs)
+	wg.Wait()
+	close(results)
+
+	var rejected []RemoteReject
+	renamed := 0
+	for res := range results {
+		if res.file == "" {
+			delete(entries, res.name)
+			rejected = append(rejected, res.reject)
+			m.log.Warn("远端资源 CAB 改名失败，不下发", "file", res.reject.File,
+				"reason", res.reject.Reason)
+			continue
+		}
+		fi, err := os.Stat(res.file)
+		if err != nil {
+			delete(entries, res.name)
+			rejected = append(rejected, RemoteReject{File: candByName[res.name].rel,
+				Reason: "CAB 规范化文件缺失: " + err.Error()})
+			continue
+		}
+		e := entries[res.name]
+		h, reason := m.hashAndCheck(res.file, "norm/"+candByName[res.name].rel,
+			fileObs{size: fi.Size(), mtimeUnix: fi.ModTime().UnixNano()})
+		if reason != "" {
+			delete(entries, res.name)
+			rejected = append(rejected, RemoteReject{File: candByName[res.name].rel,
+				Reason: "CAB 规范化文件校验失败: " + reason})
+			continue
+		}
+		e.File, e.Size = res.file, fi.Size()
+		e.MD5, e.SHA256 = h.md5, h.sha256
+		e.OrigCAB = strings.Join(remote[res.name], ",")
+		newCabs := make([]string, 0, len(remote[res.name]))
+		for _, c := range remote[res.name] {
+			if n, ok := plan[res.name][c]; ok {
+				newCabs = append(newCabs, n)
+			} else {
+				newCabs = append(newCabs, c)
+			}
+		}
+		e.CAB = strings.Join(newCabs, ",")
+		entries[res.name] = e
+		renamed++
+	}
+	return renamed, time.Since(start), rejected
+}
+
+// cabNamesFor 读 bundle 内部归档名（按 rel|size|mtime 缓存）。
+func (m *RemoteAssets) cabNamesFor(full, rel string, obs fileObs) ([]string, string) {
+	key := fmt.Sprintf("%s|%d|%d", rel, obs.size, obs.mtimeUnix)
+	if c, ok := m.cabs[key]; ok {
+		return c, ""
+	}
+	f, err := os.Open(full)
+	if err != nil {
+		return nil, "读取失败: " + err.Error()
+	}
+	defer f.Close()
+	cabs, err := unitybundle.CABNames(f)
+	if err != nil {
+		return nil, "CAB 目录解析失败: " + err.Error()
+	}
+	m.cabs[key] = cabs
+	return cabs, ""
+}
+
+// normCacheHit 规范化缓存是否命中（sidecar 的源 sha+改名表一致且文件在）。
+func (m *RemoteAssets) normCacheHit(normPath, srcSHA string, renames map[string]string) bool {
+	raw, err := os.ReadFile(normPath + ".json")
+	if err != nil {
+		return false
+	}
+	var sc normSidecar
+	if json.Unmarshal(raw, &sc) != nil || sc.SrcSHA256 != srcSHA ||
+		len(sc.Renames) != len(renames) {
+		return false
+	}
+	for o, n := range renames {
+		if sc.Renames[o] != n {
+			return false
+		}
+	}
+	fi, err := os.Stat(normPath)
+	return err == nil && !fi.IsDir()
+}
+
+// writeNormalized 读源 bundle 改名后 tmp+rename 落盘 + sidecar。
+func (m *RemoteAssets) writeNormalized(normPath, src, srcSHA string, renames map[string]string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	out, err := unitybundle.ApplyCABPlan(data, renames)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(normPath), 0o755); err != nil {
+		return err
+	}
+	tmp := normPath + ".tmp"
+	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, normPath); err != nil {
+		return err
+	}
+	sc, _ := json.Marshal(normSidecar{SrcSHA256: srcSHA, Renames: renames})
+	if err := os.WriteFile(normPath+".json.tmp", sc, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(normPath+".json.tmp", normPath+".json")
 }
 
 // hashAndCheck 魔数校验 + md5/sha256（按 rel|size|mtime 缓存）。

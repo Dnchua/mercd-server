@@ -141,8 +141,12 @@ func TestRaidWireEndToEndAndScreenshotAnchors(t *testing.T) {
 		t.Fatalf("/quests/result missing data.raid_monster: %v", qData)
 	}
 	raidID, _ := rm["id"].(string)
-	if raidID == "" || rm["message"] == nil || rm["giveup_confirm"] == nil || rm["next_page_message"] != "name=Raid&base=Common/Pages/Raid&method=Stack" {
+	if raidID == "" || rm["message"] == nil || rm["giveup_confirm"] == nil || rm["next_page_message"] != "name=Raid&base=Common/Pages/Raid" {
 		t.Fatalf("unexpected raid_monster appear modal doc: %+v", rm)
+	}
+	// 顶层 next_page_message 会覆盖弹窗选择（Quest.GoNextPage），遭遇时必须缺省。
+	if v, has := qRes["next_page_message"]; has {
+		t.Fatalf("/quests/result with raid_monster must omit next_page_message, got %v", v)
 	}
 
 	// 遭遇后 /act_pages 的 act_has_new 点亮。

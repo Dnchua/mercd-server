@@ -71,6 +71,11 @@ type CN35Config struct {
 	RaidTTLSeconds    int64
 	RaidSoloAssist    bool
 
+	// 探险战斗时段（朝/夕/夜 Fever Time）随机参数（重建值；三者均 0 = 全程白天）。
+	BattleDuskRate    float64
+	BattleFeverRate   float64
+	BattleTimeAdvance float64
+
 	// EventWindows M8 活动时间窗覆盖："44=<RFC3339>/<RFC3339>;..."（空=按目录默认，默认关闭）。
 	EventWindows string
 }
@@ -116,6 +121,12 @@ func (c *CN35Config) BindCN35(fs *flag.FlagSet) {
 		"暴走魔宠存活时长（秒，默认 5400=90 分钟）")
 	fs.BoolVar(&c.RaidSoloAssist, "raid-solo-assist", false,
 		"单机暴走模拟协力开关（开启时求援触发本地助战削血，默认关闭）")
+	fs.Float64Var(&c.BattleDuskRate, "battle-dusk-rate", 0.25,
+		"探险开局为黄昏的概率（金币/资材 ×1.2；0..1，重建值）")
+	fs.Float64Var(&c.BattleFeverRate, "battle-fever-rate", 0.10,
+		"探险开局即为夜晚 Fever Time 的概率（金币/资材 ×2；0..1，重建值）")
+	fs.Float64Var(&c.BattleTimeAdvance, "battle-time-advance-rate", 0.20,
+		"探险每进入下一波时段推进一档（朝→夕→夜）的概率（0..1；三项全 0 关闭时段随机）")
 	fs.StringVar(&c.EventWindows, "event-windows", "",
 		"M8 活动开放时间窗（44=2026-11-20T12:00:00+08:00/2026-12-04T11:00:00+08:00；多个用 ; 分隔；空=关闭）")
 }
@@ -165,6 +176,17 @@ func (c *CN35Config) ValidateCN35() error {
 	}
 	if c.RaidTriggerRate < 0 || c.RaidTriggerRate > 1 {
 		return fmt.Errorf("config: raid-trigger-rate 必须在 [0, 1] 之间: %v", c.RaidTriggerRate)
+	}
+	for name, v := range map[string]float64{
+		"battle-dusk-rate": c.BattleDuskRate, "battle-fever-rate": c.BattleFeverRate,
+		"battle-time-advance-rate": c.BattleTimeAdvance,
+	} {
+		if v < 0 || v > 1 {
+			return fmt.Errorf("config: %s 必须在 [0, 1] 之间: %v", name, v)
+		}
+	}
+	if c.BattleDuskRate+c.BattleFeverRate > 1 {
+		return fmt.Errorf("config: battle-dusk-rate + battle-fever-rate 不能超过 1")
 	}
 	if c.RaidTTLSeconds < 0 {
 		return fmt.Errorf("config: raid-ttl-sec 不能为负: %d", c.RaidTTLSeconds)
